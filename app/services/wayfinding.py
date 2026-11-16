@@ -39,6 +39,16 @@ def kiosk_for(db: Session, code: str, language: Language) -> Kiosk:
     return kiosks[0]
 
 
+# Phạt mỗi chặng thang bộ thật nặng: luôn ưu tiên thang máy khi đổi tầng,
+# thang bộ chỉ được chọn khi không còn đường nào bằng thang máy.
+STAIRS_PENALTY = 3600
+
+
+def route_weight(edge) -> int:
+    # Trọng số chỉ dùng để chọn đường; thời gian báo cho khách vẫn là cost_seconds thật.
+    return edge.cost_seconds + (STAIRS_PENALTY if edge.kind == "stairs" else 0)
+
+
 def shortest_path(origin, destination, edges):
     neighbors = defaultdict(list)
     for edge in edges:
@@ -56,9 +66,11 @@ def shortest_path(origin, destination, edges):
                 edge = previous[node]
                 path.append(edge)
                 node = edge.from_node_id
-            return cost, list(reversed(path))
+            path.reverse()
+            # Trả về tổng thời gian thật (không tính khoản phạt thang bộ).
+            return sum(edge.cost_seconds for edge in path), path
         for edge in neighbors[node]:
-            candidate = cost + edge.cost_seconds
+            candidate = cost + route_weight(edge)
             target = edge.to_node_id
             if target not in distance or candidate < distance[target]:
                 distance[target] = candidate
