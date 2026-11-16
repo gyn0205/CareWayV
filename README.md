@@ -189,6 +189,8 @@ Hai trạng thái `not_found` và `no_route` cung cấp câu phản hồi cho ng
 Để gọi OpenRouter thật, thêm `OPENROUTER_API_KEY` vào `.env` và chạy
 `docker compose up -d --wait api` để áp dụng cấu hình. Khi TTS lỗi,
 `speech_status: unavailable` vẫn đi kèm `message` và kết quả tuyến.
+Để gọi thẳng ElevenLabs (Scribe cho STT, Flash v2.5 cho TTS), đặt
+`ELEVENLABS_API_KEY` trong `.env`; key này được ưu tiên hơn OpenRouter.
 Khi chưa cấu hình key hoặc STT lỗi, dùng endpoint văn bản. Xem
 [nghiên cứu lựa chọn model và trạng thái hội thoại](docs/voice-wayfinding-research.md).
 

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.errors import WayfindingError
 from app.schema.wayfinding import DirectionResult, Language, VoiceResult, VoiceTurn
+from app.services.elevenlabs import ElevenLabsVoice
 from app.services.openrouter import OpenRouterVoice, VoiceUnavailable
 from app.services.wayfinding import find_route, kiosk_context, kiosk_for
 from app.services.wayfinding_language import select_language
@@ -30,6 +31,15 @@ def read_room_codes(text: str, language: Language) -> str:
     )
 
 
+def voice_provider() -> ElevenLabsVoice | OpenRouterVoice | None:
+    """Prefer a direct ElevenLabs key, then OpenRouter; None when neither is set."""
+    if settings.ELEVENLABS_API_KEY is not None:
+        return ElevenLabsVoice(settings.ELEVENLABS_API_KEY.get_secret_value())
+    if settings.OPENROUTER_API_KEY is not None:
+        return OpenRouterVoice(settings.OPENROUTER_API_KEY.get_secret_value())
+    return None
+
+
 def process_voice_turn(db: Session, turn: VoiceTurn) -> VoiceResult:
     context = kiosk_context(turn)
     previous = context.language if context else None
@@ -46,18 +56,17 @@ def process_voice_turn(db: Session, turn: VoiceTurn) -> VoiceResult:
         )
         raise WayfindingError("invalid_audio", message)
 
-    key = settings.OPENROUTER_API_KEY
-    if key is None:
+    provider = voice_provider()
+    if provider is None:
         message = (
-            "OpenRouter is not configured. Please use the text wayfinding API." if language == "en" else
-            "Chưa cấu hình OpenRouter. Anh chị có thể dùng API chỉ đường bằng văn bản."
+            "Voice is not configured. Please use the text wayfinding API." if language == "en" else
+            "Chưa cấu hình giọng nói. Anh chị có thể dùng API chỉ đường bằng văn bản."
         )
         raise WayfindingError("voice_not_configured", message)
     kiosk = kiosk_for(db, turn.kiosk_code, language)
     # Release the read transaction during both upstream audio calls.
     kiosk_code = kiosk.code
     db.rollback()
-    provider = OpenRouterVoice(key.get_secret_value())
     try:
         transcript, detected = provider.transcribe(turn.audio_base64, turn.format, turn.language)
     except VoiceUnavailable:

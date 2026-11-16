@@ -32,6 +32,7 @@ class BilingualWayfindingTest(unittest.TestCase):
     def setUpClass(cls):
         cls.openrouter = cls.enterClassContext(patch("app.services.openrouter.urlopen"))
         cls.enterClassContext(patch.object(settings, "OPENROUTER_API_KEY", SecretStr("mock-key")))
+        cls.enterClassContext(patch.object(settings, "ELEVENLABS_API_KEY", None))
         cls.enterClassContext(patch.object(settings, "OPENROUTER_STT_MODEL", "openai/whisper-large-v3-turbo"))
         cls.enterClassContext(patch.object(settings, "OPENROUTER_TTS_MODEL", "elevenlabs/eleven-flash-v2.5"))
 
@@ -172,6 +173,30 @@ class BilingualWayfindingTest(unittest.TestCase):
                 self.assertEqual(speech_request["provider"]["options"]["elevenlabs"]["language_code"], expected)
                 self.assertIn(spoken_code, speech_request["input"])
 
+    def test_voice_uses_elevenlabs_when_its_key_is_set(self):
+        mock_audio = b"ID3-mocked-mp3"
+        with patch.object(settings, "ELEVENLABS_API_KEY", SecretStr("mock-eleven")), \
+                patch("app.services.elevenlabs.urlopen") as eleven:
+            eleven.side_effect = [
+                io.BytesIO(json.dumps({"text": "Phòng 4-04-11, tôi dùng xe lăn", "language_code": "vie"}).encode()),
+                io.BytesIO(mock_audio),
+            ]
+            status, result = self.submit("voice", audio_base64=wav_fixture())
+        self.assertEqual(status, 200)
+        self.assert_route(result, "4-04-11", "vi", elevator=True)
+        self.assertEqual(base64.b64decode(result["audio_base64"]), mock_audio)
+        self.openrouter.assert_not_called()
+
+        stt, tts = [call.args[0] for call in eleven.call_args_list]
+        self.assertTrue(stt.full_url.endswith("/v1/speech-to-text"))
+        self.assertEqual(stt.get_header("Xi-api-key"), "mock-eleven")
+        self.assertIn(b'name="model_id"', stt.data)
+        self.assertIn(b'filename="speech.wav"', stt.data)
+        self.assertIn(f"/v1/text-to-speech/{settings.ELEVENLABS_VOICE_ID}", tts.full_url)
+        speech_request = json.loads(tts.data)
+        self.assertEqual(speech_request["language_code"], "vi")
+        self.assertIn("bốn, không bốn, một một", speech_request["text"])
+
     def test_english_route_survives_unavailable_speech(self):
         self.openrouter.side_effect = [
             io.BytesIO(b'{"text":"Room 4-04-11. I use a wheelchair."}'),
@@ -202,7 +227,7 @@ class BilingualWayfindingTest(unittest.TestCase):
         with patch.object(settings, "OPENROUTER_API_KEY", None):
             status, result = self.submit("voice", language="en", audio_base64=wav_fixture())
             self.assertEqual(status, settings.WAYFINDING_ERROR_STATUS["voice_not_configured"])
-            self.assertIn("OpenRouter is not configured", result["detail"])
+            self.assertIn("Voice is not configured", result["detail"])
 
         self.openrouter.side_effect = HTTPError(
             "https://openrouter.ai/api/v1/audio/transcriptions",

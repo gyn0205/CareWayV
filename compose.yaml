@@ -42,6 +42,10 @@ services:
       OPENROUTER_STT_MODEL: ${OPENROUTER_STT_MODEL:-openai/whisper-large-v3-turbo}
       OPENROUTER_TTS_MODEL: ${OPENROUTER_TTS_MODEL:-elevenlabs/eleven-flash-v2.5}
       OPENROUTER_TTS_VOICE: ${OPENROUTER_TTS_VOICE:-george}
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
+      ELEVENLABS_STT_MODEL: ${ELEVENLABS_STT_MODEL:-scribe_v1}
+      ELEVENLABS_TTS_MODEL: ${ELEVENLABS_TTS_MODEL:-eleven_flash_v2_5}
+      ELEVENLABS_VOICE_ID: ${ELEVENLABS_VOICE_ID:-JBFqnCBsd6RMkjVDRZzb}
     command:
       - /bin/sh
       - -c

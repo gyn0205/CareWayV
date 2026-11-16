@@ -37,6 +37,11 @@ class Settings(BaseSettings):
     OPENROUTER_STT_MODEL: str = "openai/whisper-large-v3-turbo"
     OPENROUTER_TTS_MODEL: str = "elevenlabs/eleven-flash-v2.5"
     OPENROUTER_TTS_VOICE: str = "george"
+    # When set, voice calls go straight to ElevenLabs instead of OpenRouter.
+    ELEVENLABS_API_KEY: SecretStr | None = None
+    ELEVENLABS_STT_MODEL: str = "scribe_v1"
+    ELEVENLABS_TTS_MODEL: str = "eleven_flash_v2_5"
+    ELEVENLABS_VOICE_ID: str = "JBFqnCBsd6RMkjVDRZzb"  # premade voice "George"
 
     model_config = SettingsConfigDict(
         env_file=PROJECT_ROOT / ".env",
