@@ -1,13 +1,14 @@
 <script setup>
-import { onBeforeUnmount, ref } from 'vue'
-import { Mic, Square, Upload } from '@lucide/vue'
-import { encodeRecording, fileFormat, MAX_AUDIO_BYTES, RECORDING_LIMIT_MS } from '../recording'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { Mic, Square } from '@lucide/vue'
+import { encodeRecording, MAX_AUDIO_BYTES, RECORDING_LIMIT_MS } from '../recording'
 
 defineProps({ labels: { type: Object, required: true }, busy: Boolean })
-const emit = defineEmits(['submit', 'problem'])
+const emit = defineEmits(['submit', 'problem', 'activity'])
 const recording = ref(false)
 const preparing = ref(false)
-const fileInput = ref(null)
+const active = computed(() => recording.value || preparing.value)
+watch(active, (value) => emit('activity', value), { flush: 'sync' })
 const supportsRecording = Boolean(navigator.mediaDevices?.getUserMedia && window.MediaRecorder)
 let recorder
 let stream
@@ -54,9 +55,9 @@ async function record() {
     recorder.onstop = async () => {
       const clip = new Blob(chunks, { type: recorder.mimeType || chunks[0]?.type })
       releaseMicrophone()
+      preparing.value = true
       recording.value = false
       if (disposed) return
-      preparing.value = true
       try {
         if (!clip.size || clip.size > MAX_AUDIO_BYTES) {
           emit('problem', 'audioSize')
@@ -81,21 +82,12 @@ async function record() {
   }
 }
 
-function upload(event) {
-  const file = event.target.files?.[0]
-  event.target.value = ''
-  if (!file) return
-  const format = fileFormat(file)
-  if (!format) {
-    emit('problem', 'fileError')
-    return
-  }
-  emit('submit', file, format)
-}
-
 onBeforeUnmount(() => {
   disposed = true
-  if (recorder) recorder.onstop = null
+  if (recorder) {
+    recorder.onstop = null
+    recorder.onerror = null
+  }
   stop()
   releaseMicrophone()
 })
@@ -103,21 +95,15 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="voice-input">
-    <p class="input-label">{{ supportsRecording ? labels.micHint : labels.micUnavailable }}</p>
     <button class="record-button" :class="{ 'is-recording': recording }" type="button"
+      aria-describedby="mic-status"
       :disabled="busy || preparing || !supportsRecording" @click="record">
-      <Square v-if="recording" :size="19" />
-      <Mic v-else :size="21" />
-      {{ recording ? labels.stopAndSend : labels.record }}
+      <Square v-if="recording" :size="30" aria-hidden="true" />
+      <Mic v-else :size="34" aria-hidden="true" />
+      <span>{{ recording ? labels.stopAndSend : labels.record }}</span>
     </button>
-    <p v-if="recording" class="recording-status" aria-live="polite"><span></span>{{ labels.recording }}</p>
-    <div class="upload-row">
-      <input ref="fileInput" type="file" hidden accept=".wav,.mp3,.webm,audio/wav,audio/mpeg,audio/webm"
-        :disabled="busy || recording || preparing" :aria-label="labels.upload" @change="upload">
-      <button class="quiet-button" type="button" :disabled="busy || recording || preparing" @click="fileInput.click()">
-        <Upload :size="17" /> {{ labels.upload }}
-      </button>
-      <span>{{ labels.formats }}</span>
-    </div>
+    <p id="mic-status" class="mic-status" :class="{ 'recording-status': recording }" role="status">
+      {{ recording ? labels.recording : preparing ? labels.preparingMic : supportsRecording ? labels.micHint : labels.micUnavailable }}
+    </p>
   </div>
 </template>

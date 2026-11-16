@@ -99,6 +99,33 @@ class BilingualWayfindingTest(unittest.TestCase):
                 self.assert_route(result, code, language)
         self.openrouter.assert_not_called()
 
+    def test_cashier_route_fits_the_floor_plans_on_both_sides_of_the_elevator(self):
+        status, result = self.submit(
+            "text", kiosk_code="KIOSK-4", text="3-10-01", wheelchair=True,
+        )
+        self.assertEqual(status, 200)
+        self.assert_route(result, "3-10-01", "vi")
+        route = result["route"]
+        [transfer] = [step for step in route["steps"] if step["start"]["floor_id"] != step["end"]["floor_id"]]
+        self.assertEqual(transfer["kind"], "elevator")
+        upper, lower = route["floor_plans"]
+        self.assertEqual(
+            [upper["floor_id"], lower["floor_id"]],
+            [route["origin"]["floor_id"], route["arrival"]["floor_id"]],
+        )
+        for plan, point in ((upper, transfer["start"]), (lower, transfer["end"])):
+            self.assertTrue(any(
+                landmark["kind"] == "elevator"
+                and abs(point["x"] * plan["width"] - landmark["x"]) < 1e-6
+                and abs(point["y"] * plan["height"] - landmark["y"]) < 1e-6
+                for landmark in plan["landmarks"]
+            ))
+        [room] = [room for room in lower["rooms"] if room["code"] == "3-10-01"]
+        arrival = route["arrival"]
+        self.assertEqual(room["door_side"], "south")
+        self.assertAlmostEqual(arrival["x"] * lower["width"], room["x"] + room["width"] / 2)
+        self.assertAlmostEqual(arrival["y"] * lower["height"], room["y"] + room["height"])
+
     def test_english_clarification_keeps_language_and_accessibility(self):
         status, first = self.submit("text", text="Where can I pay my bill? I use a wheelchair.")
         self.assertEqual(status, 200)

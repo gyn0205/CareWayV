@@ -1,13 +1,6 @@
 export const MAX_AUDIO_BYTES = 2 * 1024 * 1024
 export const RECORDING_LIMIT_MS = 15_000
 
-const formats = { wav: 'wav', mp3: 'mp3', webm: 'webm' }
-
-export function fileFormat(file) {
-  const extension = file.name.split('.').pop()?.toLowerCase()
-  return Object.hasOwn(formats, extension) ? formats[extension] : null
-}
-
 export async function encodeRecording(blob) {
   if (blob.type.startsWith('audio/webm')) return { blob, format: 'webm' }
 

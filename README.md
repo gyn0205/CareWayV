@@ -121,14 +121,18 @@ npm ci
 npm run dev
 ```
 
-Nếu container frontend đang giữ cổng 5173, chạy Vite bằng `npm run dev -- --port 5174`. `npm run build` tạo bản production trong `frontend/dist/`. Trình duyệt cần quyền microphone và một secure context để thu âm. HTTPS hoặc localhost đáp ứng yêu cầu đó. Người dùng có thể tải tệp WAV, MP3 hoặc WebM qua tab giọng nói. Cả hai cách gửi âm thanh dùng `OPENROUTER_API_KEY` ở backend. [Nghiên cứu thiết kế frontend](docs/frontend-design-research.md)
+Nếu container frontend đang giữ cổng 5173, chạy Vite bằng `npm run dev -- --port 5174`. `npm run build` tạo bản production trong `frontend/dist/`. Trình duyệt cần quyền microphone và một secure context để thu âm. HTTPS hoặc localhost đáp ứng yêu cầu đó. Nhấn nút mic để nói, rồi nhấn lại để gửi sớm hoặc chờ tự gửi sau 15 giây. Tính năng giọng nói dùng `OPENROUTER_API_KEY` ở backend. [Nghiên cứu thiết kế frontend](docs/frontend-design-research.md)
 
 ## Nạp dữ liệu chỉ đường mô phỏng tầng 3 và 4
 
 Tên và thứ tự các khu dựa trên hai ảnh biển sơ đồ. Phòng, tọa độ hành lang,
 chỉ dẫn từng đoạn, khoảng cách, thời gian và khả năng tiếp cận là dữ liệu giả lập.
 Các nút và cạnh trong PostgreSQL mô tả đường từ hai kiosk tới lối vào khu và
-cửa phòng. Cột `floors.map_asset_url` để trống.
+cửa phòng. Cột `floors.map_asset_url` để trống vì API dựng mặt bằng mô phỏng
+từ cùng bộ tọa độ đã dùng để nạp đồ thị. Kiosk hiển thị toàn cảnh tầng từ trên xuống
+ở chế độ 3D hoặc 2D, cho phép chọn tầng, kéo và thu phóng. Nút **Mô phỏng đường đi**
+cho người que đi theo tuyến và tự chuyển tầng qua thang máy hoặc cầu thang.
+Đây là bản xem trước từ kiosk; không dùng vị trí trực tiếp của người xem.
 
 Bộ dữ liệu có 20 phòng cho mỗi nhóm chuyên môn, 6 điểm phục vụ của nhà thuốc
 và 2 điểm tại mỗi quầy thanh toán, tổng cộng 450 phòng/điểm phục vụ trong 25 khu.
@@ -153,6 +157,12 @@ Hai endpoint khai báo tại `app/api/wayfinding.py`. `app/api/__init__.py` tậ
 
 - `POST /api/v1/wayfinding/text` nhận `kiosk_code`, `text` và tùy chọn `wheelchair`.
 - `POST /api/v1/wayfinding/voice` nhận `kiosk_code`, `audio_base64` và `format`.
+
+Khi tìm được tuyến, `route.floor_plans` có thể chứa kích thước và hình học
+mặt bằng của các tầng đi qua. Các hình dùng đơn vị của mặt bằng; nhân `x` và
+`y` đã chuẩn hóa của điểm trên tuyến với chiều rộng và chiều cao tương ứng.
+Tầng có ảnh cấu hình qua `map_asset_url` dùng ảnh làm nền. Khi chưa có mặt
+bằng, kiosk vẫn hiển thị các đoạn có tọa độ và chỉ dẫn từng bước.
   Mỗi request là một câu thu âm, tối đa 2 MiB trước khi mã hóa base64. WAV là
   định dạng mặc định. Giọng nói trả về là MP3 ở `audio_base64`. Đặt
   `speak: false` để chỉ nhận bản chép lời và kết quả chỉ đường.

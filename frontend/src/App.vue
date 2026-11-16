@@ -1,8 +1,8 @@
 <script setup>
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import {
   Accessibility, ArrowRight, Building2, ChevronDown, CircleAlert, Compass, Globe2, HeartPulse,
-  Keyboard, MapPin, Mic, Pill, Search, WalletCards,
+  MapPin, Pill, Search, Stethoscope, WalletCards,
 } from '@lucide/vue'
 import { audioBase64, replyUrl, requestDirections } from './api'
 import { copy } from './copy'
@@ -13,14 +13,18 @@ import VoiceInput from './components/VoiceInput.vue'
 const language = ref('vi')
 const kioskFloor = ref(3)
 const wheelchair = ref(false)
-const mode = ref('text')
 const query = ref('')
 const result = ref(null)
 const busy = ref(false)
 const problem = ref('')
 const audioUrl = ref('')
+const voiceActive = ref(false)
+const voiceKey = ref(0)
+const searchSection = ref(null)
+const routeSection = ref(null)
 const labels = computed(() => copy[language.value])
-const iconMap = { heart: HeartPulse, wallet: WalletCards, pill: Pill }
+const inputLocked = computed(() => busy.value || voiceActive.value)
+const iconMap = { heart: HeartPulse, wallet: WalletCards, pill: Pill, clinic: Stethoscope }
 let activeRequest
 
 function clearAudio() {
@@ -35,19 +39,21 @@ function reset() {
   result.value = null
   problem.value = ''
   query.value = ''
-  mode.value = 'text'
+  voiceActive.value = false
+  voiceKey.value++
   clearAudio()
+}
+
+async function startOver() {
+  reset()
+  await nextTick()
+  searchSection.value?.scrollIntoView({ block: 'start' })
 }
 
 watch([language, kioskFloor], () => {
   document.documentElement.lang = language.value
   reset()
 })
-
-function setMode(value) {
-  mode.value = value
-  problem.value = ''
-}
 
 function showProblem(key) {
   problem.value = labels.value[key]
@@ -70,10 +76,12 @@ async function submit(kind, prepare, newSearch = false) {
   problem.value = ''
   clearAudio()
   busy.value = true
+  let returnedRoute
   try {
     const answer = await requestDirections(kind, { ...payload, ...await prepare() }, controller.signal)
     if (controller.signal.aborted) return
     result.value = answer
+    returnedRoute = answer.route
     wheelchair.value = answer.context?.wheelchair ?? wheelchair.value
     query.value = ''
     if (answer.audio_base64) {
@@ -96,13 +104,21 @@ async function submit(kind, prepare, newSearch = false) {
       busy.value = false
     }
   }
+  if (returnedRoute) {
+    await nextTick()
+    if (!busy.value && result.value?.route) routeSection.value?.scrollIntoView({ block: 'start' })
+  }
 }
 
 function submitText(value = query.value, newSearch = false) {
   const text = value.trim()
-  if (!text.length) return
-  setMode('text')
+  if (inputLocked.value || !text) return
   submit('text', () => ({ text }), newSearch)
+}
+
+function onVoiceActivity(active) {
+  voiceActive.value = active
+  if (active) problem.value = ''
 }
 
 function submitAudio(blob, format) {
@@ -147,8 +163,8 @@ onBeforeUnmount(() => {
     </div>
   </header>
 
-  <main class="shell main-shell">
-    <section class="hero" aria-labelledby="page-title">
+  <main class="main-shell">
+    <section class="shell hero" aria-labelledby="page-title">
       <div class="hero-photo" aria-hidden="true"></div>
       <div class="hero-content">
         <div class="hero-zone"><Building2 :size="16" /> {{ labels.zones }}</div>
@@ -158,55 +174,47 @@ onBeforeUnmount(() => {
     </section>
 
     <div class="workspace">
-      <div class="input-column">
-        <section class="panel search-panel" aria-labelledby="search-title">
-          <div class="panel-heading">
-            <span class="heading-icon"><Search :size="21" /></span>
-            <h2 id="search-title">{{ labels.searchTitle }}</h2>
-          </div>
-          <div class="mode-selector">
-            <button type="button" :aria-pressed="mode === 'text'" @click="setMode('text')">
-                <Keyboard :size="19" /> {{ labels.textTab }}
-            </button>
-            <button type="button" :aria-pressed="mode === 'voice'" @click="setMode('voice')">
-                <Mic :size="18" /> {{ labels.voiceTab }}
-            </button>
-          </div>
-          <form v-if="mode === 'text'" class="query-form" @submit.prevent="submitText()">
+      <section ref="searchSection" class="panel search-panel" :aria-label="labels.searchTitle">
+        <div class="search-inputs">
+          <VoiceInput :key="voiceKey" :labels="labels" :busy="busy"
+            @submit="submitAudio" @problem="showProblem" @activity="onVoiceActivity" />
+          <form class="query-form" @submit.prevent="submitText()">
             <label class="input-label" for="wayfinding-question">
               {{ result?.context ? labels.followUp : labels.question }}
             </label>
-            <textarea id="wayfinding-question" v-model="query" rows="2" required maxlength="500"
-              :placeholder="result?.context ? labels.followPlaceholder : labels.guess"></textarea>
-            <button class="primary-button" type="submit" :disabled="busy">
-              <Search :size="19" /> {{ busy ? labels.thinking : labels.search }}
-              <ArrowRight class="button-arrow" :size="19" />
-            </button>
+            <div class="query-field">
+              <input id="wayfinding-question" v-model="query" type="text" required maxlength="500"
+                :placeholder="result?.context ? labels.followPlaceholder : labels.guess">
+              <button class="primary-button" type="submit" :disabled="inputLocked">
+                <Search :size="19" /> {{ labels.search }}
+              </button>
+            </div>
           </form>
-          <VoiceInput v-else :key="`${kioskFloor}:${language}`" :labels="labels" :busy="busy"
-            @submit="submitAudio" @problem="showProblem" />
+        </div>
+        <div class="search-options">
+          <section class="shortcuts" aria-labelledby="shortcuts-title">
+            <h2 id="shortcuts-title">{{ labels.shortcuts }}</h2>
+            <div class="shortcut-list">
+              <button v-for="choice in labels.choices" :key="choice.icon" type="button" class="shortcut"
+                :disabled="inputLocked" @click="submitText(choice.codes?.[kioskFloor] ?? choice.code, true)">
+                <span class="shortcut-icon"><component :is="iconMap[choice.icon]" :size="19" /></span>
+                <strong>{{ choice.label }}<span v-if="choice.codes"> · {{ labels.floor(kioskFloor) }}</span></strong>
+                <ArrowRight :size="16" class="shortcut-arrow" />
+              </button>
+            </div>
+          </section>
           <label class="accessibility-option">
             <Accessibility :size="20" />
             <span>{{ labels.accessible }}</span>
-            <input v-model="wheelchair" type="checkbox" role="switch" :disabled="busy">
+            <input v-model="wheelchair" type="checkbox" role="switch" :disabled="inputLocked">
           </label>
-          <p v-if="problem" class="error-message" role="alert"><CircleAlert :size="20" /> {{ problem }}</p>
-        </section>
-
-        <section class="shortcuts" aria-labelledby="shortcuts-title">
-          <h2 id="shortcuts-title">{{ labels.shortcuts }}</h2>
-          <div class="shortcut-list">
-            <button v-for="choice in labels.choices" :key="choice.icon" type="button" class="shortcut"
-              :disabled="busy" @click="submitText(choice.query, true)">
-              <span class="shortcut-icon"><component :is="iconMap[choice.icon]" :size="19" /></span>
-              <strong>{{ choice.label }}</strong>
-              <ArrowRight :size="17" class="shortcut-arrow" />
-            </button>
-          </div>
-        </section>
+        </div>
+        <p v-if="problem" class="error-message" role="alert"><CircleAlert :size="20" /> {{ problem }}</p>
+      </section>
+      <div ref="routeSection" class="route-section">
+        <RoutePanel :labels="labels" :kiosk-floor="kioskFloor" :result="result" :audio-url="audioUrl"
+          :busy="busy" :input-locked="inputLocked" @select="submitText" @reset="startOver" />
       </div>
-      <RoutePanel :labels="labels" :kiosk-floor="kioskFloor" :result="result" :audio-url="audioUrl"
-        :busy="busy" @select="submitText" @reset="reset" />
     </div>
   </main>
 

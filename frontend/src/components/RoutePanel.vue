@@ -4,6 +4,7 @@ import {
   ArrowDownUp, ArrowRight, Clock3, Footprints, LocateFixed, MapPin, RotateCcw, Route, Volume2,
 } from '@lucide/vue'
 import RouteDiagram from './RouteDiagram.vue'
+import { hasCoordinates } from '../route-map'
 
 const props = defineProps({
   labels: { type: Object, required: true },
@@ -11,11 +12,16 @@ const props = defineProps({
   result: Object,
   audioUrl: String,
   busy: Boolean,
+  inputLocked: Boolean,
 })
 defineEmits(['select', 'reset'])
 
-const view = ref('steps')
-watch(() => props.result, () => { view.value = 'steps' })
+const view = ref('map')
+watch(() => props.result, (result) => {
+  const { origin, arrival, steps } = result?.route ?? {}
+  const points = origin ? [origin, arrival, ...steps.flatMap(({ start, end }) => [start, end])] : []
+  view.value = points.some(hasCoordinates) ? 'map' : 'steps'
+}, { immediate: true })
 
 const route = computed(() => props.result?.route)
 const floorLabel = computed(() => {
@@ -73,27 +79,29 @@ function destinationName(destination) {
         </p>
 
         <div v-if="route" class="direction-result">
-          <div class="destination-banner">
-            <span class="destination-pin"><MapPin :size="24" /></span>
-            <div>
-              <p class="destination-label">{{ labels.to }} <span>· {{ route.destination.code }}</span></p>
-              <h3>{{ destinationName(route.destination) }}</h3>
-              <small v-if="route.destination.department">{{ route.destination.department }}</small>
+          <div class="route-summary">
+            <div class="destination-banner">
+              <span class="destination-pin"><MapPin :size="24" /></span>
+              <div>
+                <p class="destination-label">{{ labels.to }} <span>· {{ route.destination.code }}</span></p>
+                <h3>{{ destinationName(route.destination) }}</h3>
+                <small v-if="route.destination.department">{{ route.destination.department }}</small>
+              </div>
+              <div class="route-meta">
+                <span><ArrowDownUp :size="16" /> {{ floorLabel }}</span>
+                <span><Clock3 :size="16" /> {{ labels.minutes(Math.floor(route.seconds / 60), route.seconds % 60) }}</span>
+              </div>
+            </div>
+            <div class="result-views">
+              <button type="button" :aria-pressed="view === 'steps'" @click="view = 'steps'">
+                <Footprints :size="17" /> {{ labels.steps }}
+              </button>
+              <button type="button" :aria-pressed="view === 'map'" @click="view = 'map'">
+                <Route :size="17" /> {{ labels.map }}
+              </button>
             </div>
           </div>
-          <div class="route-meta">
-            <span><ArrowDownUp :size="16" /> {{ floorLabel }}</span>
-            <span><Clock3 :size="16" /> {{ labels.minutes(Math.floor(route.seconds / 60), route.seconds % 60) }}</span>
-          </div>
-          <div class="result-views">
-            <button type="button" :aria-pressed="view === 'steps'" @click="view = 'steps'">
-              <Footprints :size="17" /> {{ labels.steps }}
-            </button>
-            <button type="button" :aria-pressed="view === 'map'" @click="view = 'map'">
-              <Route :size="17" /> {{ labels.map }}
-            </button>
-          </div>
-          <RouteDiagram v-if="view === 'map'" :route="route" :labels="labels" />
+          <RouteDiagram v-if="view === 'map'" :route="route" :labels="labels" :language="result.language" />
           <ol v-else-if="route.steps.length" class="steps">
             <li v-for="(step, index) in route.steps" :key="index"
               :class="{ 'floor-transfer': step.start.floor_id !== step.end.floor_id }">
@@ -116,7 +124,7 @@ function destinationName(destination) {
           <p class="result-message">{{ result.message }}</p>
           <div v-if="result.candidates.length" class="candidate-list">
             <button v-for="candidate in result.candidates" :key="candidate.code" class="candidate"
-              type="button" @click="$emit('select', candidate.code)">
+              type="button" :disabled="inputLocked" @click="$emit('select', candidate.code)">
               <MapPin :size="19" />
               <span>
                 <strong>{{ destinationName(candidate) }}</strong>
