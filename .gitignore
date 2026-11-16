@@ -22,3 +22,8 @@ node_modules/
 .idea/
 .vscode/
 .DS_Store
+
+# AI tooling (graphify, ponytail, taste-skill) - chỉ dùng local
+.claude/
+CLAUDE.md
+graphify-out/
