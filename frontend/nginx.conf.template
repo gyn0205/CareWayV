@@ -1,0 +1,18 @@
+server {
+    listen 80;
+    server_name _;
+    root /usr/share/nginx/html;
+    client_max_body_size 3m;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    location /gateway/ {
+        resolver 127.0.0.11 valid=10s ipv6=off;
+        set $api_upstream http://api:8000;
+        rewrite ^/gateway/(.*)$ ${API_V1_PREFIX}${WAYFINDING_PREFIX}/$1 break;
+        proxy_pass $api_upstream;
+        proxy_read_timeout 60s;
+    }
+}

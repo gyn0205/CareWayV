@@ -1,0 +1,36 @@
+export class WayfindingRequestError extends Error {
+  constructor(message, status) {
+    super(message)
+    this.status = status
+  }
+}
+
+export async function requestDirections(mode, payload, signal) {
+  const response = await fetch(`/gateway/${mode}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    signal,
+  })
+  const data = await response.json().catch(() => null)
+  const statuses = ['route', 'clarify', 'not_found', 'no_route']
+  if (!response.ok || !statuses.includes(data?.status)) {
+    const detail = typeof data?.detail === 'string' ? data.detail : ''
+    throw new WayfindingRequestError(detail, response.status)
+  }
+  return data
+}
+
+export function audioBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result.split(',')[1])
+    reader.onerror = () => reject(reader.error)
+    reader.readAsDataURL(blob)
+  })
+}
+
+export function replyUrl(base64, mediaType) {
+  const bytes = Uint8Array.from(atob(base64), (byte) => byte.charCodeAt(0))
+  return URL.createObjectURL(new Blob([bytes], { type: mediaType || 'audio/mpeg' }))
+}

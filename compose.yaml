@@ -56,5 +56,23 @@ services:
       timeout: 3s
       retries: 5
 
+  frontend:
+    image: carewayv-frontend:local
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      API_V1_PREFIX: ${API_V1_PREFIX:-/api/v1}
+      WAYFINDING_PREFIX: ${WAYFINDING_PREFIX:-/wayfinding}
+    ports:
+      - "127.0.0.1:${CAREWAYV_FRONTEND_PORT:-5173}:80"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
 volumes:
   pgdata:

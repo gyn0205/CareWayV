@@ -87,7 +87,7 @@ Các liên kết phòng, dịch vụ, kiosk và đồ thị được giới hạ
 
 ## Trạng thái và hướng triển khai
 
-Repo có FastAPI, 11 bảng SQLAlchemy, PostgreSQL, migration Alembic và bộ dữ liệu chỉ đường mô phỏng tầng 3–4. Docker Compose chạy hai service `api` và `db`. API áp dụng migration trước khi khởi động. Backend tra điểm đến, hỏi thêm khi có nhiều kết quả, tính tuyến và xử lý từng lượt giọng nói qua OpenRouter. Thư mục `frontend/` dành cho giao diện phát triển sau.
+Repo có FastAPI, 11 bảng SQLAlchemy, PostgreSQL, migration Alembic và bộ dữ liệu chỉ đường mô phỏng tầng 3–4. Docker Compose chạy `frontend`, `api` và `db`. API áp dụng migration trước khi khởi động. Frontend Vue 3 gọi API để tra điểm đến, làm rõ khi có nhiều kết quả và hiển thị tuyến chỉ đường song ngữ.
 
 1. **Chuẩn bị dữ liệu cho một khu vực.** Dùng sơ đồ và danh mục phòng được xác thực. Gắn vị trí kiosk, cửa phòng và các mốc chuyển tầng vào đồ thị. Đánh dấu chiều đi, đoạn đang mở và khả năng tiếp cận.
 2. **Làm luồng chỉ đường bằng văn bản.** Nhập mã phòng hoặc tên dịch vụ, xử lý trường hợp nhiều điểm đến, sau đó trả tuyến và hiển thị sơ đồ tầng. Đây là luồng để kiểm tra dữ liệu và thuật toán trước khi tích hợp giọng nói.
@@ -96,7 +96,7 @@ Repo có FastAPI, 11 bảng SQLAlchemy, PostgreSQL, migration Alembic và bộ d
 
 Kịch bản demo tối thiểu gồm tìm phòng bằng mã, hỏi tên dịch vụ có nhiều phòng và xác nhận thêm thông tin, cùng một tuyến đổi tầng qua thang máy. Có thể đánh giá bằng tỷ lệ chọn đúng phòng, thời gian từ lúc hỏi đến lúc nhận hướng dẫn và số lượt phải chuyển qua quầy tư vấn.
 
-## Chạy nền backend
+## Chạy CareWayV
 
 Từ thư mục gốc, với Docker Compose đang sẵn sàng:
 
@@ -106,7 +106,22 @@ docker compose up -d --build --wait
 docker compose ps
 ```
 
-Mở [Swagger UI](http://127.0.0.1:8000/docs). Lệnh kiểm tra database, cấu hình `.env` và cách sinh revision mới nằm trong [hướng dẫn Docker Compose và Alembic](docs/database-migrations.md).
+Với database mới, [nạp dữ liệu chỉ đường mô phỏng](#nạp-dữ-liệu-chỉ-đường-mô-phỏng-tầng-3-và-4) trước khi thử tìm tuyến.
+
+Mở [frontend kiosk](http://127.0.0.1:5173) hoặc [Swagger UI](http://127.0.0.1:8000/docs). Có thể đặt `CAREWAYV_FRONTEND_PORT` trong `.env` để đổi cổng giao diện. Lệnh kiểm tra database, cấu hình `.env` và cách sinh revision mới nằm trong [hướng dẫn Docker Compose và Alembic](docs/database-migrations.md).
+
+### Phát triển frontend
+
+Chạy các lệnh sau khi API đã có dữ liệu mẫu. Vite dùng `.env` ở thư mục gốc để chuyển các request `/gateway/` đến API cục bộ. Docker Compose dùng Nginx cho cùng cơ chế proxy.
+
+```bash
+docker compose up -d --wait api
+cd frontend
+npm ci
+npm run dev
+```
+
+Nếu container frontend đang giữ cổng 5173, chạy Vite bằng `npm run dev -- --port 5174`. `npm run build` tạo bản production trong `frontend/dist/`. Trình duyệt cần quyền microphone và một secure context để thu âm. HTTPS hoặc localhost đáp ứng yêu cầu đó. Người dùng có thể tải tệp WAV, MP3 hoặc WebM qua tab giọng nói. Cả hai cách gửi âm thanh dùng `OPENROUTER_API_KEY` ở backend. [Nghiên cứu thiết kế frontend](docs/frontend-design-research.md)
 
 ## Nạp dữ liệu chỉ đường mô phỏng tầng 3 và 4
 
@@ -134,7 +149,7 @@ các bản ghi thuộc bộ dữ liệu mô phỏng.
 
 ## API chỉ đường
 
-Hai endpoint khai báo tại `app/api/wayfinding.py`. `app/api/__init__.py` tập hợp router để `app/main.py` gắn vào FastAPI. `app/core/config.py` đọc tiền tố, tag Swagger, Cache-Control và mã lỗi từ `.env`. Xem các biến trong `.env.example`. `WAYFINDING_ERROR_STATUS` nhận một object JSON và cho phép ghi đè từng mã. Sau khi đổi cấu hình, chạy `docker compose up -d --wait api` để áp dụng. [Swagger UI](http://127.0.0.1:8000/docs)
+Hai endpoint khai báo tại `app/api/wayfinding.py`. `app/api/__init__.py` tập hợp router để `app/main.py` gắn vào FastAPI. `app/core/config.py` đọc tiền tố, tag Swagger, Cache-Control và mã lỗi từ `.env`. Xem các biến trong `.env.example`. `WAYFINDING_ERROR_STATUS` nhận một object JSON và cho phép ghi đè từng mã. Sau khi đổi cấu hình, chạy `docker compose up -d --wait api frontend` để áp dụng cho cả API và proxy. [Swagger UI](http://127.0.0.1:8000/docs)
 
 - `POST /api/v1/wayfinding/text` nhận `kiosk_code`, `text` và tùy chọn `wheelchair`.
 - `POST /api/v1/wayfinding/voice` nhận `kiosk_code`, `audio_base64` và `format`.
