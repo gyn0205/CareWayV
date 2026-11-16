@@ -7,6 +7,8 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import WayfindingError
 from app.crud import wayfinding as catalog
+from app.db.seeds.vinmec_floors_3_4.catalog import SITE_CODE
+from app.db.seeds.vinmec_floors_3_4.floor_plan import demo_floor_plan
 from app.models import Kiosk
 from app.schema.wayfinding import Clarification, DirectionResult, Language, Point, Route, Step, TextTurn, Turn
 from app.services.wayfinding_language import normalize, select_language
@@ -193,11 +195,20 @@ def find_route(
         )
     if steps:
         message += " " + " ".join(step.instruction for step in steps)
+    origin, arrival = point(kiosk.origin_node_id), point(target_id)
+    site_record = catalog.active_site(db, site)
+    floor_plans = []
+    if site_record and site_record.code == SITE_CODE:
+        route_floors = dict.fromkeys([origin.floor_id, *(step.end.floor_id for step in steps)])
+        for floor_id in route_floors:
+            plan = demo_floor_plan(floor_id, floors[floor_id].level)
+            if plan and not floors[floor_id].map_asset_url:
+                floor_plans.append(plan)
     return DirectionResult(
         status="route", language=language,
         message=message,
         route=Route(
-            destination=destination, origin=point(kiosk.origin_node_id),
-            arrival=point(target_id), seconds=seconds, steps=steps,
+            destination=destination, origin=origin, arrival=arrival,
+            seconds=seconds, steps=steps, floor_plans=floor_plans,
         ),
     )

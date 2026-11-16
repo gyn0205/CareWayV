@@ -59,12 +59,47 @@ class Step(BaseModel):
     end: Point
 
 
+class MapArea(BaseModel):
+    code: str
+    x: int
+    y: int
+    width: int
+    height: int
+
+
+class MapZone(MapArea):
+    name: str
+    name_en: str
+
+
+class MapRoom(MapArea):
+    door_side: Literal["north", "south"]
+
+
+class MapLandmark(BaseModel):
+    code: str
+    x: int
+    y: int
+    kind: Literal["elevator", "stairs", "restroom", "kiosk"]
+
+
+class FloorPlan(BaseModel):
+    floor_id: int
+    width: int
+    height: int
+    zones: list[MapZone]
+    rooms: list[MapRoom]
+    landmarks: list[MapLandmark]
+    corridors: list[tuple[int, int, int, int]]
+
+
 class Route(BaseModel):
     destination: Destination
     origin: Point
     arrival: Point
     seconds: int
     steps: list[Step]
+    floor_plans: list[FloorPlan] = Field(default_factory=list)
 
 
 class DirectionResult(BaseModel):
