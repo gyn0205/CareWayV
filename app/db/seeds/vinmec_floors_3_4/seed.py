@@ -1,0 +1,173 @@
+"""Load synthetic floor 3–4 wayfinding data into PostgreSQL."""
+
+import unicodedata
+
+from sqlalchemy import select, text
+
+from app.db.session import SessionLocal
+from app.models import (
+    Building,
+    Department,
+    Floor,
+    HospitalSite,
+    Kiosk,
+    NavigationEdge,
+    NavigationNode,
+    Room,
+    Service,
+    ServiceAlias,
+    ServiceLocation,
+)
+
+from .catalog import ENGLISH_ZONE_NAMES, SITE_CODE, ZONES
+from .layout import FLOORS, HEIGHT, WIDTH, build_layout, room_slots
+
+
+def normalize(value: str) -> str:
+    folded = unicodedata.normalize("NFD", value.casefold().replace("đ", "d"))
+    return " ".join("".join(c for c in folded if not unicodedata.combining(c)).split())
+
+
+def sync(session, model, scope, keys, rows):
+    """Insert or refresh the listed records, preserving IDs and unrelated records."""
+    query = select(model).filter_by(**scope).execution_options(include_deleted=True)
+    existing = {
+        tuple(getattr(record, key) for key in keys): record for record in session.scalars(query)
+    }
+    result = {}
+    for row in rows:
+        identity = tuple(row[key] for key in keys)
+        record = existing.get(identity)
+        if record is None:
+            record = model(**scope, **row)
+            session.add(record)
+        else:
+            for key, value in row.items():
+                setattr(record, key, value)
+            record.restore()
+        result[identity] = record
+    session.flush()
+    return result
+
+
+def seed(session) -> dict[str, int]:
+    # Concurrent invocations of this loader should see the same IDs.
+    session.execute(text("SELECT pg_advisory_xact_lock(hashtext(:code))"), {"code": SITE_CODE})
+    site = sync(
+        session, HospitalSite, {}, ("code",), [
+            {"code": SITE_CODE, "name": "Vinmec · Bản đồ mô phỏng tầng 3–4"},
+        ],
+    )[SITE_CODE,]
+    scope = {"site_id": site.id}
+    building = sync(
+        session, Building, scope, ("code",), [
+            {"code": "DEMO", "name": "Tòa nhà mô phỏng"},
+        ],
+    )["DEMO",]
+    floors = sync(
+        session, Floor, {**scope, "building_id": building.id}, ("level",), [
+            {"level": floor, "label": f"Tầng {floor}", "map_asset_url": None}
+            for floor in FLOORS
+        ],
+    )
+    departments = sync(
+        session, Department, scope, ("code",), [
+            {"code": zone.code, "name": zone.name, "name_en": ENGLISH_ZONE_NAMES[zone.code]}
+            for zone in ZONES
+        ],
+    )
+    layout = build_layout()
+    nodes = sync(
+        session, NavigationNode, scope, ("floor_id", "code"), [
+            {
+                "floor_id": floors[floor,].id, "code": code, "label": point.label,
+                "x": point.x / WIDTH, "y": point.y / HEIGHT,
+            }
+            for (floor, code), point in layout.nodes.items()
+        ],
+    )
+
+    def node_id(key):
+        floor, code = key
+        return nodes[floors[floor,].id, code].id
+
+    edges = sync(
+        session, NavigationEdge, scope, ("from_node_id", "to_node_id", "kind"), [
+            {
+                "from_node_id": node_id(edge.origin), "to_node_id": node_id(edge.destination),
+                "kind": edge.kind, "cost_seconds": edge.cost, "instruction": edge.instruction,
+                "instruction_en": edge.instruction_en,
+                "wheelchair_accessible": edge.kind != "stairs", "is_active": True,
+            }
+            for edge in layout.edges
+        ],
+    )
+    kiosks = sync(
+        session, Kiosk, scope, ("code",), [
+            {
+                "code": f"KIOSK-{floor}", "name": f"Kiosk tầng {floor}",
+                "origin_node_id": node_id((floor, "KIOSK")), "is_active": True,
+            }
+            for floor in FLOORS
+        ],
+    )
+    slots = [slot for zone in ZONES for slot in room_slots(zone)]
+    rooms = sync(
+        session, Room, scope, ("code",), [
+            {
+                "code": slot.code, "name": slot.name, "description": slot.description,
+                "entrance_node_id": node_id((slot.zone.floor, slot.code)),
+                "department_id": departments[slot.zone.code,].id, "is_active": True,
+            }
+            for slot in slots
+        ],
+    )
+    # Share a service across rooms for the same activity, including A/B room pairs.
+    service_by_room = {
+        slot.code: slot.name[:-2] if slot.name.endswith((" A", " B", " C", " D")) else slot.name
+        for slot in slots
+    }
+    service_rows = {}
+    for room_code, name in service_by_room.items():
+        service_rows.setdefault(name, {
+            "code": f"DV-{room_code}", "name": name, "normalized_name": normalize(name),
+        })
+    services = sync(session, Service, scope, ("code",), service_rows.values())
+    service_ids = {name: services[row["code"],].id for name, row in service_rows.items()}
+    aliases = {
+        "Thanh toán viện phí": ("đóng viện phí", "quầy thu ngân", "pay my bill", "pay the hospital bill", "hospital billing"),
+        "Tiếp nhận mẫu nước tiểu": ("nộp mẫu nước tiểu", "nộp mẫu tiểu", "urine sample", "urine specimen"),
+        "Điện tâm đồ": ("ECG", "đo điện tim", "electrocardiogram", "EKG"),
+        "Chụp nhũ ảnh": ("X-quang tuyến vú", "mammogram", "mammography"),
+        "Nhận thuốc theo đơn": ("lấy thuốc", "nhận thuốc", "pick up my medication", "prescription pickup"),
+        "Nội soi đại tràng": ("soi đại tràng", "colonoscopy"),
+        "Nội soi dạ dày": ("soi dạ dày", "gastroscopy", "upper endoscopy"),
+        "Lấy mẫu HbA1c": ("xét nghiệm HbA1c", "HbA1c test"),
+        "Phân tích dáng chạy": ("đo dáng chạy", "running gait analysis"),
+    }
+    sync(
+        session, ServiceAlias, scope, ("service_id", "normalized_alias"), [
+            {"service_id": service_ids[name], "normalized_alias": normalize(alias), "alias": alias}
+            for name, values in aliases.items() for alias in values
+        ],
+    )
+    sync(
+        session, ServiceLocation, scope, ("service_id", "room_id"), [
+            {"service_id": service_ids[name], "room_id": rooms[code,].id, "is_active": True}
+            for code, name in service_by_room.items()
+        ],
+    )
+    return {
+        "floors": len(floors), "departments": len(departments), "rooms": len(rooms),
+        "services": len(services), "nodes": len(nodes), "edges": len(edges), "kiosks": len(kiosks),
+    }
+
+
+def main() -> None:
+    with SessionLocal.begin() as session:
+        counts = seed(session)
+    print(f"{SITE_CODE}: {counts}")
+
+
+if __name__ == "__main__":
+    main()

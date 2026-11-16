@@ -87,7 +87,7 @@ Các liên kết phòng, dịch vụ, kiosk và đồ thị được giới hạ
 
 ## Trạng thái và hướng triển khai
 
-Repo hiện có ứng dụng FastAPI cơ bản, 11 bảng SQLAlchemy, PostgreSQL và migration Alembic. Docker Compose chạy hai service `api` và `db`. API áp dụng migration trước khi khởi động. Swagger UI hiện dùng để kiểm tra ứng dụng đã chạy. Luồng tra cứu điểm đến, định tuyến, kiosk và Voice AI là các phần triển khai tiếp theo.
+Repo có FastAPI, 11 bảng SQLAlchemy, PostgreSQL, migration Alembic và bộ dữ liệu chỉ đường mô phỏng tầng 3–4. Docker Compose chạy hai service `api` và `db`. API áp dụng migration trước khi khởi động. Backend tra điểm đến, hỏi thêm khi có nhiều kết quả, tính tuyến và xử lý từng lượt giọng nói qua OpenRouter. Thư mục `frontend/` dành cho giao diện phát triển sau.
 
 1. **Chuẩn bị dữ liệu cho một khu vực.** Dùng sơ đồ và danh mục phòng được xác thực. Gắn vị trí kiosk, cửa phòng và các mốc chuyển tầng vào đồ thị. Đánh dấu chiều đi, đoạn đang mở và khả năng tiếp cận.
 2. **Làm luồng chỉ đường bằng văn bản.** Nhập mã phòng hoặc tên dịch vụ, xử lý trường hợp nhiều điểm đến, sau đó trả tuyến và hiển thị sơ đồ tầng. Đây là luồng để kiểm tra dữ liệu và thuật toán trước khi tích hợp giọng nói.
@@ -107,3 +107,69 @@ docker compose ps
 ```
 
 Mở [Swagger UI](http://127.0.0.1:8000/docs). Lệnh kiểm tra database, cấu hình `.env` và cách sinh revision mới nằm trong [hướng dẫn Docker Compose và Alembic](docs/database-migrations.md).
+
+## Nạp dữ liệu chỉ đường mô phỏng tầng 3 và 4
+
+Tên và thứ tự các khu dựa trên hai ảnh biển sơ đồ. Phòng, tọa độ hành lang,
+chỉ dẫn từng đoạn, khoảng cách, thời gian và khả năng tiếp cận là dữ liệu giả lập.
+Các nút và cạnh trong PostgreSQL mô tả đường từ hai kiosk tới lối vào khu và
+cửa phòng. Cột `floors.map_asset_url` để trống.
+
+Bộ dữ liệu có 20 phòng cho mỗi nhóm chuyên môn, 6 điểm phục vụ của nhà thuốc
+và 2 điểm tại mỗi quầy thanh toán, tổng cộng 450 phòng/điểm phục vụ trong 25 khu.
+Mã như `3-01-09` chỉ tầng 3, khu số 01, phòng số 09. Trong DB, dữ liệu thuộc
+cơ sở mô phỏng riêng `VINMEC-DEMO-F34`.
+
+```bash
+docker compose up -d --wait db
+venv/bin/python -m alembic upgrade head
+venv/bin/python -m app.db.seeds.vinmec_floors_3_4.seed
+```
+
+Dùng đường dẫn Python của virtualenv đang cài các gói trong `requirements.txt`.
+Nếu đã chạy API trong Compose, có thể nạp dữ liệu bằng
+`docker compose exec api python -m app.db.seeds.vinmec_floors_3_4.seed`.
+Khi chạy lại, seed giữ ID hiện có và làm mới mô tả, tọa độ, trạng thái của
+các bản ghi thuộc bộ dữ liệu mô phỏng.
+
+## API chỉ đường
+
+Hai endpoint khai báo tại `app/api/wayfinding.py`. `app/api/__init__.py` tập hợp router để `app/main.py` gắn vào FastAPI. `app/core/config.py` đọc tiền tố, tag Swagger, Cache-Control và mã lỗi từ `.env`. Xem các biến trong `.env.example`. `WAYFINDING_ERROR_STATUS` nhận một object JSON và cho phép ghi đè từng mã. Sau khi đổi cấu hình, chạy `docker compose up -d --wait api` để áp dụng. [Swagger UI](http://127.0.0.1:8000/docs)
+
+- `POST /api/v1/wayfinding/text` nhận `kiosk_code`, `text` và tùy chọn `wheelchair`.
+- `POST /api/v1/wayfinding/voice` nhận `kiosk_code`, `audio_base64` và `format`.
+  Mỗi request là một câu thu âm, tối đa 2 MiB trước khi mã hóa base64. WAV là
+  định dạng mặc định. Giọng nói trả về là MP3 ở `audio_base64`. Đặt
+  `speak: false` để chỉ nhận bản chép lời và kết quả chỉ đường.
+
+Cả hai API nhận `language: "auto" | "vi" | "en"`, mặc định là `auto`, và trả
+trường `language` cho biết ngôn ngữ phản hồi. Có thể gửi `en` hoặc `vi` khi kiosk
+đã biết ngôn ngữ người dùng chọn. Với voice ở chế độ tự động, Whisper nhận diện
+ngôn ngữ của từng câu. Mã phòng dùng chung cho cả hai ngôn ngữ. Danh mục tiếng Anh
+có tên 25 khu và bí danh cho các dịch vụ đã cấu hình. Tên và mô tả gốc của các
+phòng vẫn dùng dữ liệu tiếng Việt, còn từng bước chỉ đường có bản tiếng Anh.
+
+```bash
+curl -fsS http://127.0.0.1:8000/api/v1/wayfinding/text \
+  -H 'Content-Type: application/json' \
+  -d '{"kiosk_code":"KIOSK-3","text":"Chỉ đường tới phòng 4-04-11","wheelchair":true}'
+```
+
+Kết quả `route` gồm điểm xuất phát, cửa đến, thời gian ước tính và từng đoạn
+có tọa độ, tầng, loại lối đi và câu chỉ dẫn. Khi `status` là `clarify`,
+hiển thị hoặc đọc `message` và gửi lại `context` nguyên vẹn cùng câu trả lời
+tiếp theo. Giữ ngữ cảnh ở phiên kiosk đang hoạt động và bỏ khi kết thúc phiên.
+Hai trạng thái `not_found` và `no_route` cung cấp câu phản hồi cho người dùng.
+
+Để gọi OpenRouter thật, thêm `OPENROUTER_API_KEY` vào `.env` và chạy
+`docker compose up -d --wait api` để áp dụng cấu hình. Khi TTS lỗi,
+`speech_status: unavailable` vẫn đi kèm `message` và kết quả tuyến.
+Khi chưa cấu hình key hoặc STT lỗi, dùng endpoint văn bản. Xem
+[nghiên cứu lựa chọn model và trạng thái hội thoại](docs/voice-wayfinding-research.md).
+
+Kiểm thử qua HTTP với PostgreSQL đã migrate và seed theo hướng dẫn trên.
+OpenRouter được mock trong tiến trình kiểm thử:
+
+```bash
+venv/bin/python -m unittest discover -s tests -p 'test_wayfinding_bilingual.py' -v
+```

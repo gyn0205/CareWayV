@@ -14,3 +14,4 @@ class Department(SiteRecord):
 
     code: Mapped[str] = mapped_column(String(40))
     name: Mapped[str] = mapped_column(String(160))
+    name_en: Mapped[str | None] = mapped_column(String(160))

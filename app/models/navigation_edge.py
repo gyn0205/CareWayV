@@ -30,3 +30,4 @@ class NavigationEdge(BaseModel):
     wheelchair_accessible: Mapped[bool]
     is_active: Mapped[bool] = mapped_column(Boolean, server_default=true())
     instruction: Mapped[str | None] = mapped_column(Text)
+    instruction_en: Mapped[str | None] = mapped_column(Text)

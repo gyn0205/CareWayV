@@ -50,6 +50,8 @@ Migration `0001` tạo 11 bảng. Revision `0002` bổ sung các cột audit và
 ## Cấu trúc backend
 
 - `app/main.py` là entry point FastAPI. Chạy `python -m uvicorn app.main:app --reload` để mở Swagger UI tại `http://127.0.0.1:8000/docs`.
+- `app/api/` khai báo và tập hợp router. `app/core/errors.py` định nghĩa phản hồi lỗi HTTP. `app/schema/` định nghĩa dữ liệu yêu cầu và phản hồi bằng Pydantic.
+- `app/services/` xử lý tra cứu, định tuyến và gọi OpenRouter. `app/crud/` tập trung các truy vấn SQLAlchemy phục vụ những luồng này.
 - `app/core/config.py` khởi tạo `settings = Settings()`. `app/db/session.py` tạo engine và `SessionLocal` từ `settings.SQLALCHEMY_DATABASE_URI`. Route import `DbSession` từ `app.core.dependencies` và khai báo `db: DbSession` để FastAPI mở và đóng session theo request. Khi cần đọc lại thay đổi trong cùng giao dịch trước khi commit, gọi `db.flush()`.
 - `app/db/base.py` khai báo SQLAlchemy Base. `app/db/base_model.py` import models và cung cấp metadata cho `migration/env.py`.
 - Mỗi bảng có một file trong `app/models/`. Khi thêm bảng, import model trong `app/models/__init__.py` để đăng ký vào metadata.
