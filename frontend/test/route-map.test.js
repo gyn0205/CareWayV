@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { Vector3 } from 'three'
 import { frameFloorCamera, makeFloorCamera } from '../src/floor-scene.js'
-import { fitOverview, fitRouteView, floorFootprint, floorRoute, previewFrame, previewTimeline, roomEntrance, routeFloors } from '../src/route-map.js'
+import { fitOverview, fitRouteView, floorFootprint, floorRoute, previewFrame, previewTimeline, roomEntrance, routeFloors, headingDegrees, wrapLabel, zoneCode } from '../src/route-map.js'
 
 const kiosk = { floor_id: 54, floor: 4, x: 0.54, y: 0.64 }
 const liftIn = { floor_id: 54, floor: 4, x: 0.46, y: 0.69 }
@@ -122,4 +122,43 @@ test('route view enlarges a short route and keeps a long route within the map', 
       assert.ok(Math.abs(y - centerY) * scaleY < size.height / 2 - 24)
     }
   }
+})
+
+test('zone labels wrap to two lines like the wall sign and never overflow', () => {
+  assert.equal(zoneCode('3-10-01'), '3-10')
+  assert.equal(zoneCode('4-06'), '4-06')
+  assert.deepEqual(wrapLabel('Nhà thuốc', 20), ['Nhà thuốc'])
+  assert.deepEqual(wrapLabel('Trung tâm Y học Tái tạo và Trị liệu Tế bào', 24), ['Trung tâm Y học Tái tạo', 'và Trị liệu Tế bào'])
+  for (const limit of [8, 12, 18]) {
+    const lines = wrapLabel('Phòng khám Tai Mũi Họng – Răng Hàm Mặt – Mắt', limit)
+    assert.ok(lines.length <= 2)
+    assert.ok(lines.every((line) => line.length <= limit))
+  }
+  assert.deepEqual(wrapLabel('Motion Lab', 4), [])
+})
+
+test('exit signs at the edge of the floor stay inside the overview frame', () => {
+  const plan = {
+    width: 1000, height: 1080, zones: [{ x: 60, y: 45, width: 440, height: 145 }],
+    rooms: [], corridors: [], landmarks: [], exits: [{ x: 70, y: 590 }],
+  }
+  assert.deepEqual(floorFootprint(plan), { x: 50, y: 45, width: 450, height: 554 })
+})
+
+test('a wider minimum frame shows the surrounding departments on short routes', () => {
+  const viewport = { width: 900, height: 600 }
+  const short = [[470, 740], [500, 791]]
+  const close = fitRouteView(viewport, short, true)
+  const wide = fitRouteView(viewport, short, true, [640, 440])
+  assert.ok(wide.scaleX < close.scaleX)
+  assert.equal(wide.scaleX, wide.scaleY)
+})
+
+test('the 2D guide arrow points along the current walking segment', () => {
+  assert.equal(headingDegrees([0, 0], [10, 0]), 0)
+  assert.equal(headingDegrees([0, 0], [0, 10]), 90)
+  assert.equal(headingDegrees([0, 0], [0, -10]), -90)
+  assert.equal(headingDegrees([5, 5], [-5, 5]), 180)
+  // Đứng yên (đoạn dài dưới 1px) thì không vẽ mũi tên.
+  assert.equal(headingDegrees([3, 3], [3.4, 3.2]), null)
 })

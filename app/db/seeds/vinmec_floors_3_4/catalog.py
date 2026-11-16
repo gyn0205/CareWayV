@@ -13,6 +13,7 @@ class Zone:
     row: int
     name: str
     rooms: tuple[str, ...]
+    signed: bool = True  # có số trên bảng mặt bằng thật hay không
 
     @property
     def code(self) -> str:
@@ -22,9 +23,14 @@ class Zone:
     def entry_code(self) -> str:
         return f"ENTRY-{self.code}"
 
+    @property
+    def sign_label(self) -> str:
+        """Cách gọi khu trong câu chỉ đường: có số thì kèm "khu số N"."""
+        return f"khu số {self.number} — {self.name}" if self.signed else self.name
 
-def zone(floor: int, number: int, side: str, row: int, name: str, rooms: str) -> Zone:
-    return Zone(floor, number, side, row, name, tuple(part.strip() for part in rooms.split("|")))
+
+def zone(floor: int, number: int, side: str, row: int, name: str, rooms: str, *, signed: bool = True) -> Zone:
+    return Zone(floor, number, side, row, name, tuple(part.strip() for part in rooms.split("|")), signed)
 
 
 ZONES = (
@@ -233,6 +239,10 @@ ZONES = (
         Đo khúc xạ | Đo nhãn áp | Chụp đáy mắt | Tư vấn kính và chăm sóc mắt |
         Hẹn tái khám liên chuyên khoa
     """),
+    # Quầy lễ tân – tư vấn ở cửa Trung tâm KSK Tổng quát (không có số trên bảng thật).
+    zone(4, 14, "west", 7, "Quầy Lễ tân – Tư vấn dịch vụ", """
+        Lễ tân và hướng dẫn | Tư vấn dịch vụ và đặt lịch
+    """, signed=False),
 )
 
 ENGLISH_ZONE_NAMES = {
@@ -261,4 +271,5 @@ ENGLISH_ZONE_NAMES = {
     "4-11": "Spinal Intervention Unit",
     "4-12": "Hemodialysis Unit",
     "4-13": "ENT, Dentistry and Ophthalmology Clinic",
+    "4-14": "Reception and Service Advice Desk",
 }

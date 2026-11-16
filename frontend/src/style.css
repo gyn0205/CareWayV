@@ -216,13 +216,26 @@ svg { flex-shrink: 0; }
 .floor-transfer .step-icon { background: #d4eaf4; color: #076d92; }
 .steps small { font-size: 12px; font-weight: 720; color: #0f6b8a; }
 .steps p { margin-top: 2px; color: #345166; font-size: 14px; line-height: 1.55; }
-.route-diagram { margin-top: 14px; }
+/* ===== Bản đồ chỉ đường — màu theo bảng "Mặt bằng tầng" thật, đã làm dịu cho dễ nhìn ===== */
+.route-diagram {
+  margin-top: 14px;
+  /* Cam ấm (khu bên cam) và xanh lá dịu (khu bên xanh) giống biển treo tường;
+     độ bão hòa vừa phải để không chói mắt, vẫn đủ tương phản với tuyến xanh dương. */
+  --zone-orange: #f7cfa2; --zone-orange-edge: #e2a25f; --zone-orange-strong: #f2aa62; --zone-orange-ink: #8a4a12;
+  --zone-green: #b7e0c0; --zone-green-edge: #5eae76; --zone-green-strong: #7fca93; --zone-green-ink: #1f6b3a;
+  --hall: #f7e4a3; --hall-edge: #ddbd5e;
+  --sunroom: #e3e5e8; --sunroom-shade: #c5cad0;
+  --exit: #2e9658; --ink: #2c2823; --target: #d64534;
+  /* Quầy lễ tân – tư vấn: xanh ngọc nhạt (màu thương hiệu), tách khỏi cam/xanh lá của các khu */
+  --desk: #c9e7ef; --desk-edge: #0c7294; --desk-strong: #8fd0e0;
+}
 .route-diagram:fullscreen {
   display: flex; flex-direction: column; margin: 0; padding: clamp(10px, 2vw, 22px);
-  background: #f7fafc; overflow: auto;
+  background: #faf8f3; overflow: auto;
 }
-.route-diagram:fullscreen > .map-viewport { flex: 1; height: auto; min-height: min(220px, 35vh); }
-.route-diagram:fullscreen > :not(.map-viewport) { flex-shrink: 0; }
+.route-diagram:fullscreen > .map-stage { flex: 1; min-height: min(260px, 40vh); }
+.route-diagram:fullscreen .map-viewport { height: auto; min-height: min(220px, 35vh); }
+.route-diagram:fullscreen > :not(.map-stage) { flex-shrink: 0; }
 .map-toolbar, .map-playback { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; }
 .map-toolbar { justify-content: space-between; margin-bottom: 9px; }
 .map-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-inline-start: auto; }
@@ -231,57 +244,124 @@ svg { flex-shrink: 0; }
 .floor-tabs button[aria-pressed='true'] { background: #0c7294; color: white; border-color: #0c7294; }
 .map-mode { display: inline-flex; align-items: center; gap: 6px; }
 .map-mode[aria-pressed='true'] { background: #eaf3fc; color: #244f89; border-color: #d5e5f6; }
+/* Bản đồ bên trái, danh mục khu bên phải — như bố cục bảng sơ đồ */
+.map-stage { display: grid; gap: 10px; }
+.map-stage.has-directory { grid-template-columns: minmax(0, 1fr) clamp(220px, 25%, 300px); }
 .map-viewport {
-  position: relative; overflow: hidden; isolation: isolate;
+  position: relative; overflow: hidden; isolation: isolate; min-width: 0;
   height: clamp(320px, calc(100svh - 305px), 860px);
-  border: 1px solid #c9d8e4; border-radius: 12px;
+  border: 1px solid #e3dccb; border-radius: 12px;
   background:
-    radial-gradient(circle, #496e8c28 1px, transparent 1.2px) 0 0 / 20px 20px,
-    radial-gradient(ellipse at 45% 30%, #eef4f8, #d9e5ed 85%);
+    radial-gradient(circle, #9b8a6420 1px, transparent 1.2px) 0 0 / 22px 22px,
+    radial-gradient(ellipse at 45% 30%, #fdfbf6, #f1ece1 88%);
 }
 .map-scene { position: absolute; inset: 0; display: block; width: 100%; height: 100%; pointer-events: none; }
 .indoor-map { position: relative; width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; user-select: none; }
 .indoor-map:active { cursor: grabbing; }
-.map-floor { fill: #f5f8fa; stroke: #cbd9e2; stroke-width: 2; }
-.map-zone { fill: #e6eef4; stroke: #d0dce5; stroke-width: 1.5; }
-.map-zone-target { fill: #e4edf9; stroke: #b1c8ec; }
+.map-floor { fill: #fffdf8; stroke: #e4d6b3; stroke-width: 3; }
+/* Khu: viền trắng tách khu như bảng thật */
+.map-zone { fill: #e9eef2; stroke: #fff; stroke-width: 3; stroke-linejoin: round; }
+.map-zone.tone-orange { fill: var(--zone-orange); }
+.map-zone.tone-green { fill: var(--zone-green); }
+.map-zone.tone-desk { fill: var(--desk); stroke: var(--desk-edge); stroke-width: 2; }
+.map-zone-target { stroke-width: 3.5; filter: drop-shadow(0 2px 5px #6b4a1a33); }
+.map-zone-target.tone-orange { fill: var(--zone-orange-strong); stroke: var(--zone-orange-edge); }
+.map-zone-target.tone-green { fill: var(--zone-green-strong); stroke: var(--zone-green-edge); }
+.map-zone-target.tone-desk { fill: var(--desk-strong); stroke: var(--desk-edge); }
+.map-zone-target:not(.tone-orange):not(.tone-green) { fill: #e4edf9; stroke: #b1c8ec; }
+.map-sunroom rect { fill: var(--sunroom); stroke: #fff; stroke-width: 2; }
+.map-sunroom-shade { fill: var(--sunroom-shade); }
+.map-hall { fill: var(--hall); stroke: var(--hall-edge); stroke-width: 2; }
 .map-corridor { stroke: white; stroke-linecap: round; }
-.map-room { fill: #cfdee8; stroke: #b9ccda; stroke-width: 1; }
-.map-room-target { fill: #acd4fa; stroke: #3d7cb9; }
-.zone-badge { fill: #f8fcfff2; stroke: #b7ccda; stroke-width: 1; }
-.zone-label { fill: #2b455c; font-weight: 660; font-size: 11px; }
-.zone-badge-target .zone-badge { fill: #e7f2ff; stroke: #83b0e1; }
-.zone-badge-target .zone-label { fill: #104d91; font-weight: 750; }
-.map-marker-label, .map-landmark { fill: white; stroke: #c4d4e4; stroke-width: 1; }
+.map-core rect { fill: #fffdf6; stroke: #d2b660; stroke-width: 1.5; }
+.core-void rect { fill: #d9dce0; stroke: #b9bec5; }
+.core-escalator rect { fill: #c3c8cf; stroke: #a5acb5; }
+.core-escalator path { stroke: #8d959f; stroke-width: 2; }
+.core-exit_stair rect { fill: var(--exit); stroke: #fff; }
+.core-exit-text, .map-exit text { fill: #fff; font-size: 11px; font-weight: 800; letter-spacing: .04em; }
+.map-exit rect { fill: var(--exit); stroke: #fff; stroke-width: 1.5; }
+.map-room { fill: #fffdf8d9; stroke: #b9a888; stroke-width: 1; }
+.map-room-target { fill: #fff1ee; stroke: var(--target); stroke-width: 2.4; }
+.map-door { fill: #fff; stroke: #8f7f62; stroke-width: .8; }
+/* Nhãn khu: vòng số tối + tên khu có viền sáng để đọc rõ trên mọi màu */
+.zone-number { fill: var(--ink); stroke: #fff; stroke-width: 2; }
+.zone-number-text { fill: #fff; font-size: 12px; font-weight: 800; }
+.zone-label { fill: var(--ink); font-size: 11px; font-weight: 720; stroke: #fffaf2e6; stroke-width: 3px; paint-order: stroke; stroke-linejoin: round; }
+.zone-badge.tone-desk .zone-number { fill: var(--desk-edge); }
+.zone-badge-target .zone-number { fill: var(--target); }
+.zone-badge-target.tone-orange .zone-label { fill: var(--zone-orange-ink); }
+.zone-badge-target.tone-green .zone-label { fill: var(--zone-green-ink); }
+.zone-badge-target .zone-label { font-weight: 820; }
+.map-marker-label { fill: white; stroke-width: 1.2; }
+.map-landmark rect { fill: white; stroke: #b9a888; stroke-width: 1; }
+/* Bảng sơ đồ tầng: vạch tối viền vàng sát mép giếng sảnh */
+.core-board rect { fill: #3a332b; stroke: #c9a24a; stroke-width: 1.2; }
 .marker-label { font-size: 11px; font-weight: 750; }
-.landmark-label { fill: #456077; font-size: 9px; font-weight: 780; }
-.map-walker { fill: none; stroke: #133761; stroke-width: 3.2; stroke-linecap: round; stroke-linejoin: round; paint-order: stroke fill; }
-.walker-body, .walker-arm, .walker-leg { filter: drop-shadow(0 0 1px white); }
-.walker-leg { transform-origin: 0px -10px; }
-.walker-arm { transform-origin: 0px -19px; }
+.landmark-label { fill: #3e3a33; font-size: 9px; font-weight: 800; }
+.glyph-fill { fill: #3e3a33; }
+.glyph-line { fill: none; stroke: #3e3a33; stroke-width: 1.6; stroke-linejoin: round; }
+/* Người dẫn đường 2D: huy hiệu trắng viền xanh (nổi trên tuyến xanh và mọi màu khu),
+   biểu tượng người xanh, mũi tên xanh viền trắng chỉ hướng đang đi */
+.guide-shadow { fill: #10284a; opacity: .2; }
+.guide-badge { fill: #fff; stroke: #2466d8; stroke-width: 3; filter: drop-shadow(0 2px 4px #10284a4d); }
+.guide-icon { fill: #2466d8; }
+.guide-heading { fill: #2466d8; stroke: #fff; stroke-width: 2.2; stroke-linejoin: round; paint-order: stroke; filter: drop-shadow(0 1px 2px #10284a40); }
+.guide-pulse { fill: #2466d8; opacity: 0; transform-box: fill-box; transform-origin: center; }
+.guide-bob { transform-box: fill-box; transform-origin: center; }
 @media (prefers-reduced-motion: no-preference) {
-  .is-walking .walker-left { animation: walking-swing 580ms ease-in-out infinite alternate; }
-  .is-walking .walker-right { animation: walking-swing 580ms ease-in-out infinite alternate-reverse; }
+  /* Khi đang đi: nhún nhẹ và tỏa vòng sáng, nhịp chậm cho dễ chịu */
+  .map-guide.is-walking .guide-bob { animation: guide-bob 640ms ease-in-out infinite alternate; }
+  .map-guide.is-walking .guide-pulse { animation: guide-pulse 1.6s ease-out infinite; }
 }
-@keyframes walking-swing { from { transform: rotate(-21deg); } to { transform: rotate(21deg); } }
-.map-badge, .map-empty { position: absolute; left: 10px; padding: 6px 9px; border-radius: 7px; background: #fff; color: #34556c; box-shadow: 0 1px 4px #15366614; font-size: 11px; font-weight: 700; }
-.map-badge { top: 10px; pointer-events: none; }
+@keyframes guide-bob { from { transform: translateY(0); } to { transform: translateY(-2.5px); } }
+@keyframes guide-pulse { from { opacity: .28; transform: scale(.8); } to { opacity: 0; transform: scale(1.7); } }
+.map-badge, .map-empty { position: absolute; left: 10px; padding: 6px 9px; border-radius: 7px; background: #fff; color: #4a3f2c; box-shadow: 0 1px 4px #3b2e1414; font-size: 11px; font-weight: 750; letter-spacing: .02em; }
+.map-badge { top: 10px; pointer-events: none; border-left: 3px solid #c9a24a; text-transform: uppercase; }
 .map-empty { bottom: 10px; right: 10px; }
-.map-controls { position: absolute; right: 10px; bottom: 10px; display: grid; border: 1px solid #cbdce6; border-radius: 10px; background: white; color: #1b4e75; box-shadow: 0 2px 9px #15366621; }
+.map-controls { position: absolute; right: 10px; bottom: 10px; display: grid; border: 1px solid #e0d6c0; border-radius: 10px; background: white; color: #1b4e75; box-shadow: 0 2px 9px #3b2e1421; }
 .map-controls button { width: 38px; height: 38px; display: grid; place-items: center; border: 0; border-radius: 8px; background: transparent; color: inherit; }
-.map-controls button + button { border-top: 1px solid #e0ebf2; }
-.map-controls button:hover:not(:disabled) { background: #eaf4fb; }
+.map-controls button + button { border-top: 1px solid #efe8da; }
+.map-controls button:hover:not(:disabled) { background: #f6f1e6; }
 .map-controls button:disabled { opacity: .4; }
+/* Danh mục khu */
+.zone-directory { min-width: 0; display: flex; flex-direction: column; border: 1px solid #e3dccb; border-radius: 12px; background: #fffdf8; overflow: hidden; }
+.zone-directory h3 { padding: 10px 12px; font-size: 13px; letter-spacing: .03em; text-transform: uppercase; color: #4a3f2c; background: #f6efe0; border-bottom: 1px solid #ebe1cb; }
+.zone-directory ol { list-style: none; margin: 0; padding: 6px; display: grid; gap: 4px; overflow: auto; align-content: start; flex: 1; }
+.zone-directory li { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; font-size: 12.5px; line-height: 1.3; color: var(--ink); border-inline-start: 4px solid transparent; }
+.zone-directory li.tone-orange { background: #fdf0e1; border-inline-start-color: var(--zone-orange-edge); }
+.zone-directory li.tone-green { background: #ebf7ee; border-inline-start-color: var(--zone-green-edge); }
+.zone-directory li.tone-desk { background: #e6f4f8; border-inline-start-color: var(--desk-edge); }
+.zone-directory li.tone-desk .directory-number { background: var(--desk-edge); }
+.zone-directory li.is-target { outline: 2px solid var(--target); outline-offset: -2px; font-weight: 750; }
+.directory-number { flex: 0 0 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; background: var(--ink); color: #fff; font-size: 11px; font-weight: 800; }
+.is-target .directory-number { background: var(--target); }
+.directory-name { flex: 1; min-width: 0; }
+.directory-tag { flex: 0 0 auto; padding: 2px 6px; border-radius: 10px; background: var(--target); color: #fff; font-size: 10.5px; font-weight: 750; }
 .map-playback { margin-top: 10px; }
 .map-play { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 40px; padding: 7px 12px; border: 0; border-radius: 8px; background: #0c7294; color: white; font-size: 13px; font-weight: 700; }
 .map-playback input { flex: 1; min-width: 72px; height: 36px; accent-color: #2466d8; }
 .map-guide-instruction { margin-top: 6px; padding: 9px 11px; border-radius: 7px; background: #edf4fc; color: #234565; font-size: 13px; line-height: 1.4; }
-.diagram-key { display: flex; flex-wrap: wrap; gap: 5px 14px; color: var(--muted); font-size: 12px; margin: 10px 0 5px; }
+.diagram-key, .map-legend { display: flex; flex-wrap: wrap; gap: 5px 14px; color: var(--muted); font-size: 12px; margin: 10px 0 5px; }
+.map-legend { margin-top: 0; padding: 7px 10px; border-radius: 9px; background: #f7f3ea; color: #5a4f3c; }
+.map-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.map-legend svg { width: 20px; height: 18px; }
+.legend-box { fill: #fff; stroke: #b9a888; }
+.legend-text { fill: #3e3a33; font-size: 8px; font-weight: 800; }
+.legend-exit { font-style: normal; padding: 1px 4px; border-radius: 3px; background: var(--exit); color: #fff; font-size: 9px; font-weight: 800; }
+.legend-swatch { width: 16px; height: 12px; border-radius: 3px; }
+.swatch-sunroom { background: linear-gradient(110deg, var(--sunroom-shade) 32%, var(--sunroom) 32%); border: 1px solid #c9ced4; }
+.swatch-hall { background: var(--hall); border: 1px solid var(--hall-edge); }
+.swatch-board { height: 6px; border-radius: 2px; background: #3a332b; border: 1px solid #c9a24a; }
+.swatch-desk { background: var(--desk); border: 1px solid var(--desk-edge); }
 .diagram-key i { width: 9px; height: 9px; border-radius: 50%; }
 .origin-key { background: #2466d8; }
 .path-key { background: #2466d8; border-radius: 3px !important; }
-.arrival-key { background: #cf4239; }
+.arrival-key { background: #d64534; }
 .map-note { color: var(--muted); font-size: 12px; line-height: 1.4; }
+@media (max-width: 900px) {
+  .map-stage.has-directory { grid-template-columns: minmax(0, 1fr); }
+  .zone-directory ol { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); max-height: 260px; }
+}
 
 .transcript, .audio-note { font-size: 13px; color: var(--muted); line-height: 1.5; margin-bottom: 12px; }
 .transcript strong { color: var(--navy); margin-right: 5px; }

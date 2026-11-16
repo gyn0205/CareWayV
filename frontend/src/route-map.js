@@ -2,6 +2,59 @@ export const hasCoordinates = (point) => Number.isFinite(point.x) && Number.isFi
 
 export const isTransfer = (step) => step.start.floor_id !== step.end.floor_id
 
+// Mã khu từ mã phòng: "3-10-01" → "3-10"; mã khu giữ nguyên.
+export const zoneCode = (code) => code.split('-').slice(0, 2).join('-')
+
+// Chia tên khu thành tối đa 2 dòng, mỗi dòng không quá `limit` ký tự; quá dài thì thêm "…".
+export function wrapLabel(text, limit) {
+  if (limit < 6) return []
+  if (text.length <= limit) return [text]
+  const lines = ['']
+  for (const word of text.split(' ')) {
+    const line = lines.at(-1)
+    if (!line || line.length + 1 + word.length <= limit) lines[lines.length - 1] = line ? `${line} ${word}` : word
+    else lines.push(word)
+  }
+  if (lines.length <= 2 && lines.every((line) => line.length <= limit)) return lines
+  const second = lines.slice(1).join(' ')
+  return [
+    lines[0].length > limit ? `${lines[0].slice(0, limit - 1).trimEnd()}…` : lines[0],
+    second.length > limit ? `${second.slice(0, limit - 1).trimEnd()}…` : second,
+  ]
+}
+
+// Hướng đi (độ, 0 = sang phải, chiều kim đồng hồ trên màn hình); đoạn quá ngắn thì không có hướng.
+export function headingDegrees([startX, startY], [endX, endY]) {
+  const dx = endX - startX
+  const dy = endY - startY
+  if (Math.hypot(dx, dy) < 1) return null
+  return Math.atan2(dy, dx) * 180 / Math.PI
+}
+
+// Điểm nằm trong (hoặc trên cạnh) đa giác — dùng để giữ nhãn khu nằm trong khu.
+export function insidePolygon(points, x, y) {
+  let inside = false
+  for (let index = 0; index < points.length; index++) {
+    const [x1, y1] = points[index]
+    const [x2, y2] = points[(index + 1) % points.length]
+    if (x1 === x2 && x1 === x && y >= Math.min(y1, y2) && y <= Math.max(y1, y2)) return true
+    if (y1 === y2 && y1 === y && x >= Math.min(x1, x2) && x <= Math.max(x1, x2)) return true
+    if ((y1 > y) !== (y2 > y) && x < (x2 - x1) * (y - y1) / (y2 - y1) + x1) inside = !inside
+  }
+  return inside
+}
+
+// Mảng bóng chéo trong giếng trời, giống hình thang tối trên bảng sơ đồ.
+export function sunroomShade({ x, y, width, height }) {
+  return [[x, y], [x + width * 0.32, y + height * 0.24], [x + width * 0.32, y + height], [x, y + height]]
+    .map((point) => point.join(',')).join(' ')
+}
+
+// Các bậc thang bộ trong giếng sảnh.
+export function stairTreads({ x, y, width, height }) {
+  return Array.from({ length: 7 }, (_, step) => `M ${x + 5} ${y + 6 + step * (height - 12) / 6} H ${x + width - 5}`).join(' ')
+}
+
 export function routeFloors(route) {
   const floors = new Map()
   for (const point of [route.origin, ...route.steps.flatMap(({ start, end }) => [start, end]), route.arrival]) {
@@ -88,6 +141,8 @@ export function floorFootprint(plan) {
     include(x - width / 2, y - height / 2, width, height)
   }
   for (const { x, y } of plan.landmarks) include(x - 12, y - 14, 24, 28)
+  // Biển EXIT nằm sát mép khu, tính vào khung để không bị cắt.
+  for (const { x, y } of plan.exits ?? []) include(x - 20, y - 9, 40, 18)
 
   if (!Number.isFinite(left)) return { x: 0, y: 0, width: plan.width, height: plan.height }
   return { x: left, y: top, width: right - left, height: bottom - top }
@@ -107,15 +162,15 @@ export function fitOverview(size, bounds, fillWidth = false) {
   }
 }
 
-export function fitRouteView(size, points, hasFloorMap) {
+// `minimum` = khung tối thiểu (đơn vị bản đồ) để tuyến ngắn vẫn thấy các khu xung quanh.
+export function fitRouteView(size, points, hasFloorMap, minimum = hasFloorMap ? [480, 280] : [260, 150]) {
   const xs = points.map(([x]) => x)
   const ys = points.map(([, y]) => y)
   const [left, right] = [Math.min(...xs), Math.max(...xs)]
   const [top, bottom] = [Math.min(...ys), Math.max(...ys)]
   const horizontalPadding = Math.min(64, size.width * 0.15)
   const verticalPadding = Math.min(60, size.height * 0.16)
-  const minimumWidth = hasFloorMap ? 480 : 260
-  const minimumHeight = hasFloorMap ? 280 : 150
+  const [minimumWidth, minimumHeight] = minimum
   const scale = Math.min(
     (size.width - 2 * horizontalPadding) / Math.max(right - left, minimumWidth),
     (size.height - 2 * verticalPadding) / Math.max(bottom - top, minimumHeight),

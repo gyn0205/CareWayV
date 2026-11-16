@@ -50,6 +50,18 @@ def sync(session, model, scope, keys, rows):
     return result
 
 
+def retire(session, model, scope, keep):
+    """Ẩn (soft-delete) bản ghi cũ không còn trong mặt bằng mới, tránh lối tắt sai."""
+    # So sánh theo đối tượng trong session (cạnh dùng khóa ghép, không có cột id).
+    kept = set(keep.values())
+    for record in session.scalars(select(model).filter_by(**scope)):
+        if record not in kept:
+            record.soft_delete()
+            if hasattr(record, "is_active"):
+                record.is_active = False
+    session.flush()
+
+
 def seed(session) -> dict[str, int]:
     # Concurrent invocations of this loader should see the same IDs.
     session.execute(text("SELECT pg_advisory_xact_lock(hashtext(:code))"), {"code": SITE_CODE})
@@ -102,6 +114,9 @@ def seed(session) -> dict[str, int]:
             for edge in layout.edges
         ],
     )
+    # Đồ thị cũ (bản sơ đồ trước) bị ẩn đi để chỉ còn lối đi theo mặt bằng mới.
+    retire(session, NavigationEdge, scope, edges)
+    retire(session, NavigationNode, scope, nodes)
     kiosks = sync(
         session, Kiosk, scope, ("code",), [
             {
@@ -144,6 +159,11 @@ def seed(session) -> dict[str, int]:
         "Nội soi dạ dày": ("soi dạ dày", "gastroscopy", "upper endoscopy"),
         "Lấy mẫu HbA1c": ("xét nghiệm HbA1c", "HbA1c test"),
         "Phân tích dáng chạy": ("đo dáng chạy", "running gait analysis"),
+        # Quầy lễ tân – tư vấn ở cửa Trung tâm KSK Tổng quát, tầng 4.
+        "Lễ tân và hướng dẫn": ("quầy lễ tân", "lễ tân", "reception", "reception desk", "information desk"),
+        "Tư vấn dịch vụ và đặt lịch": (
+            "quầy tư vấn", "tư vấn dịch vụ", "đặt lịch khám", "service advice desk", "book an appointment",
+        ),
     }
     sync(
         session, ServiceAlias, scope, ("service_id", "normalized_alias"), [

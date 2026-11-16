@@ -70,6 +70,12 @@ class MapArea(BaseModel):
 class MapZone(MapArea):
     name: str
     name_en: str
+    # Số khu, màu và đường viền giống bảng mặt bằng thật (tùy chọn cho bản cũ).
+    number: int | None = None
+    tone: Literal["orange", "green", "desk"] | None = None
+    outline: list[tuple[int, int]] = Field(default_factory=list)
+    label_x: int | None = None
+    label_y: int | None = None
 
 
 class MapRoom(MapArea):
@@ -83,6 +89,21 @@ class MapLandmark(BaseModel):
     kind: Literal["elevator", "stairs", "restroom", "kiosk"]
 
 
+class MapBlock(BaseModel):
+    """Khối chỉ để vẽ: giếng trời, lõi thang máy, WC, thang thoát hiểm, giếng sảnh, bảng sơ đồ."""
+
+    kind: Literal["sunroom", "void", "lift", "restroom", "exit_stair", "escalator", "board"]
+    x: int
+    y: int
+    width: int
+    height: int
+
+
+class MapSign(BaseModel):
+    x: int
+    y: int
+
+
 class FloorPlan(BaseModel):
     floor_id: int
     width: int
@@ -91,6 +112,9 @@ class FloorPlan(BaseModel):
     rooms: list[MapRoom]
     landmarks: list[MapLandmark]
     corridors: list[tuple[int, int, int, int]]
+    hall: list[tuple[int, int]] = Field(default_factory=list)
+    blocks: list[MapBlock] = Field(default_factory=list)
+    exits: list[MapSign] = Field(default_factory=list)
 
 
 class Route(BaseModel):

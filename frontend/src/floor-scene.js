@@ -1,9 +1,10 @@
 import {
-  BoxGeometry, CircleGeometry, Color, DirectionalLight, Group, HemisphereLight, InstancedMesh,
-  Mesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, OrthographicCamera, Scene,
-  SphereGeometry, WebGLRenderer,
+  BoxGeometry, CircleGeometry, Color, DirectionalLight, EdgesGeometry, ExtrudeGeometry, Group,
+  HemisphereLight, InstancedMesh, LineBasicMaterial, LineSegments, Mesh, MeshBasicMaterial,
+  MeshLambertMaterial, Object3D, OrthographicCamera, Scene, Shape, SphereGeometry, Vector2,
+  WebGLRenderer,
 } from 'three'
-import { corridorFootprint, roomEntrance } from './route-map.js'
+import { corridorFootprint, roomEntrance, zoneCode } from './route-map.js'
 
 const roomColors = [
   ['#dce9f1', '#a2bacd'],
@@ -11,6 +12,56 @@ const roomColors = [
   ['#eee8df', '#c9b8a3'],
   ['#e8e5f0', '#bab0d1'],
 ]
+// Màu khu giống bảng mặt bằng thật (cam / xanh lá), bản đậm hơn cho khu đích.
+const toneColors = {
+  orange: { floor: '#f7cfa2', target: '#f2aa62', side: '#dca06a' },
+  green: { floor: '#b7e0c0', target: '#7fca93', side: '#7fb48c' },
+  desk: { floor: '#c9e7ef', target: '#8fd0e0', side: '#6fb3c6' }, // quầy lễ tân – tư vấn
+}
+// Khối lõi và khối trang trí: [màu, đáy, chiều cao].
+const blockStyles = {
+  sunroom: ['#d6d9dd', -2, 2.5],
+  void: ['#c4c9cf', 0.6, 0.8],
+  escalator: ['#a7aeb7', 1.4, 3],
+  lift: ['#f4f1e8', 0, 18],
+  restroom: ['#e5edf2', 0, 11],
+  exit_stair: ['#2e9658', 0, 10],
+  board: ['#3a332b', 0, 14], // bảng sơ đồ: tấm tối đứng sát mép giếng sảnh
+
+}
+
+// Đa giác mặt bằng → khối đùn đứng (trục y của mặt bằng là trục z trong Three.js).
+function extrudedOutline(points, depth, top, color, edges) {
+  const shape = new Shape(points.map(([x, y]) => new Vector2(x, y)))
+  const geometry = new ExtrudeGeometry(shape, { depth, bevelEnabled: false })
+  const material = new MeshLambertMaterial({ color })
+  const mesh = new Mesh(geometry, material)
+  // Xoay +90° quanh trục X: (x, y, z) → (x, -z, y), mặt trên nằm ở cao độ `top`.
+  mesh.rotation.x = Math.PI / 2
+  mesh.position.y = top
+  const group = new Group()
+  group.add(mesh)
+  if (edges) {
+    const outline = new LineSegments(new EdgesGeometry(geometry), new LineBasicMaterial({ color: edges }))
+    outline.rotation.x = Math.PI / 2
+    outline.position.y = top + 0.05
+    group.add(outline)
+  }
+  return group
+}
+
+function planSolids(plan, destinationCode) {
+  const solids = new Group()
+  const target = zoneCode(destinationCode)
+  for (const zone of plan.zones) {
+    if (!zone.outline?.length) continue
+    const palette = toneColors[zone.tone] ?? toneColors.orange
+    const isTarget = zone.code === target
+    solids.add(extrudedOutline(zone.outline, isTarget ? 9 : 6, 0, isTarget ? palette.target : palette.floor, '#ffffff'))
+  }
+  if (plan.hall?.length) solids.add(extrudedOutline(plan.hall, 5, 0.6, '#f7e4a3', '#ddbd5e'))
+  return solids
+}
 
 function planBoxes(plan, destinationCode) {
   const boxes = []
@@ -18,49 +69,69 @@ function planBoxes(plan, destinationCode) {
   const box = (x, z, width, depth, base, height, color) => {
     boxes.push({ x, z, width, depth, base, height, color })
   }
+  const detailed = plan.zones.some((zone) => zone.outline?.length)
   const zoneColors = new Map()
   for (const [index, zone] of plan.zones.entries()) {
-    const colors = roomColors[index % roomColors.length]
+    const colors = zone.tone
+      ? [toneColors[zone.tone].floor, toneColors[zone.tone].side]
+      : roomColors[index % roomColors.length]
     zoneColors.set(zone.code, colors)
+    if (zone.outline?.length) continue
     const x = zone.x + zone.width / 2
     const z = zone.y + zone.height / 2
     box(x, z, zone.width, zone.height, -9, 8, colors[1])
     box(x, z, zone.width, zone.height, -1, 0.8, colors[0])
   }
 
-  for (const segment of plan.corridors) {
-    const { x, y: z, width, height: depth } = corridorFootprint(segment)
-    box(x, z, width, depth, -9, 7, '#adbfc9')
-    box(x, z, width - 1, depth - 1, -2, 2, '#f3f3ea')
+  if (!plan.hall?.length) {
+    for (const segment of plan.corridors) {
+      const { x, y: z, width, height: depth } = corridorFootprint(segment)
+      box(x, z, width, depth, -9, 7, '#adbfc9')
+      box(x, z, width - 1, depth - 1, -2, 2, '#f3f3ea')
+    }
   }
 
-  for (const [index, room] of plan.rooms.entries()) {
+  // Lõi hành lang, giếng trời và biển EXIT của mặt bằng mới.
+  for (const block of plan.blocks ?? []) {
+    const [color, base, height] = blockStyles[block.kind] ?? ['#cccccc', 0, 4]
+    box(block.x + block.width / 2, block.y + block.height / 2, block.width, block.height, base, height, color)
+    if (block.kind === 'lift') {
+      // Nắp buồng thang máy: xám xanh dịu, không chói.
+      box(block.x + block.width / 2, block.y + block.height / 2, block.width - 14, block.height - 14, height, 1.5, '#b9c3cf')
+    }
+  }
+  for (const sign of plan.exits ?? []) box(sign.x, sign.y, 34, 13, 0, 5, '#2e9658')
+
+  // Mặt bằng mới chỉ dựng phòng của khu đích để bản đồ gọn như bảng thật.
+  const target = zoneCode(destinationCode)
+  const rooms = detailed ? plan.rooms.filter((room) => zoneCode(room.code) === target) : plan.rooms
+  for (const [index, room] of rooms.entries()) {
     const door = roomEntrance(room, plan.corridors)
     const north = door.side === 'north'
     const z = room.y + room.height / 2
     const [floorColor, accent] = zoneColors.get(room.code.split('-').slice(0, 2).join('-')) ?? roomColors[0]
     const destination = room.code === destinationCode
-    const wall = destination ? '#4f91dd' : '#9dafbc'
+    const wall = destination ? '#d64534' : '#a99d88'
     const thickness = 2.5
     const wallHeight = destination ? 14 : 12
     const gap = Math.min(14, room.width / 2)
     const wing = (room.width - gap) / 2
 
-    box(door.x, z, room.width, room.height, -0.2, 1, destination ? '#acd4fa' : floorColor)
+    box(door.x, z, room.width, room.height, -0.2, 1, destination ? '#ffe1db' : floorColor)
     box(room.x + 3, z, 4, room.height - 2, 0.8, 0.22, accent)
     box(door.x, north ? room.y + room.height : room.y, room.width, thickness, 0.8, wallHeight, wall)
     box(room.x, z, thickness, room.height, 0.8, wallHeight, wall)
     box(room.x + room.width, z, thickness, room.height, 0.8, wallHeight, wall)
     box(room.x + wing / 2, door.y, wing, thickness, 0.8, 7.5, wall)
     box(room.x + room.width - wing / 2, door.y, wing, thickness, 0.8, 7.5, wall)
-    box(door.x, door.y, gap, 5, 0.3, 0.75, destination ? '#317acb' : accent)
+    box(door.x, door.y, gap, 5, 0.3, 0.75, destination ? '#c13a2a' : accent)
     for (const side of [-1, 1]) {
-      box(door.x + side * gap / 2, door.y, 2.3, 3.7, 0.8, 8.8, destination ? '#1b62ba' : accent)
+      box(door.x + side * gap / 2, door.y, 2.3, 3.7, 0.8, 8.8, destination ? '#a83224' : accent)
     }
 
-    // Small props give a sense of room scale. Leave the doorway and its approach clear.
+    // Đồ đạc nhỏ cho cảm giác tỉ lệ phòng; chừa trống lối cửa.
     const back = north ? 1 : -1
-    const furnitureColor = destination ? '#6e9dc3' : accent
+    const furnitureColor = destination ? '#e89c8f' : accent
     if (index % 3 === 0) {
       box(door.x - 7, z + back * 6, 13, 12, 0.8, 6.5, furnitureColor)
       box(door.x - 7, z + back * 6, 13, 12, 7.3, 1.4, '#fcfcf8')
@@ -188,10 +259,20 @@ export function createFloorScene(canvas) {
   const walker = makeWalker()
   scene.add(walker.model)
   let floor
+  let solids
   let width = 0
   let height = 0
 
   function clearFloor() {
+    // Giải phóng khối đùn của khu và hành lang.
+    if (solids) {
+      scene.remove(solids)
+      solids.traverse((part) => {
+        part.geometry?.dispose()
+        part.material?.dispose()
+      })
+      solids = undefined
+    }
     if (!floor) return
     scene.remove(floor)
     floor.dispose()
@@ -201,6 +282,8 @@ export function createFloorScene(canvas) {
   return {
     setFloor(plan, destinationCode) {
       clearFloor()
+      solids = planSolids(plan, destinationCode)
+      scene.add(solids)
       const boxes = planBoxes(plan, destinationCode)
       const transform = new Object3D()
       const color = new Color()
