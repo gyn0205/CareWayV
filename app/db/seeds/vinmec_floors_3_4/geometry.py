@@ -51,9 +51,9 @@ LANDMARKS = {
     "WC-A": (500, 221, "restroom", "WC đầu hành lang", "the restroom at the top of the corridor", "west"),
     "LIFT-A": (500, 358, "elevator", "Thang máy A", "elevator A", "mid-410"),
     "STAIRS": (500, 680, "stairs", "Cầu thang bộ giữa sảnh", "the stairs in the atrium", "mid-740"),
-    # Hai kiosk mỗi tầng, đứng ở lối băng ngang ngay trước bảng sơ đồ cạnh thang máy A / B.
-    "KIOSK-A": (470, 410, "kiosk", "Kiosk chỉ đường cạnh thang máy A", "the wayfinding kiosk by elevator A", "crossing-410"),
-    "KIOSK": (470, 740, "kiosk", "Kiosk chỉ đường cạnh thang máy B", "the wayfinding kiosk by elevator B", "crossing-740"),
+    # Hai kiosk mỗi tầng, đứng giữa lối băng ngang, ngay trước tâm bảng sơ đồ cạnh thang máy A / B.
+    "KIOSK-A": (500, 410, "kiosk", "Kiosk chỉ đường cạnh thang máy A", "the wayfinding kiosk by elevator A", "crossing-410"),
+    "KIOSK": (500, 740, "kiosk", "Kiosk chỉ đường cạnh thang máy B", "the wayfinding kiosk by elevator B", "crossing-740"),
     "LIFT-B": (500, 791, "elevator", "Thang máy B", "elevator B", "mid-740"),
     "WC-B": (500, 907, "restroom", "WC cuối hành lang", "the restroom at the bottom of the corridor", "west"),
 }

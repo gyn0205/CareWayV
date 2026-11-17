@@ -101,7 +101,9 @@ function destinationName(destination) {
               </button>
             </div>
           </div>
-          <RouteDiagram v-if="view === 'map'" :route="route" :labels="labels" :language="result.language" />
+          <!-- Bấm khu trong danh mục = tìm mới (không dùng ngữ cảnh hội thoại cũ) -->
+          <RouteDiagram v-if="view === 'map'" :route="route" :labels="labels" :language="result.language"
+            :disabled="inputLocked" @select="(code) => $emit('select', code, true)" />
           <ol v-else-if="route.steps.length" class="steps">
             <li v-for="(step, index) in route.steps" :key="index"
               :class="{ 'floor-transfer': step.start.floor_id !== step.end.floor_id }">

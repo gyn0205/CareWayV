@@ -214,18 +214,20 @@ def add_hall(layout: Layout, floor: int) -> None:
                 forward_en=f"Follow the {side_en[lane]} side of the main corridor for about {distance} metres towards the bottom of the map.",
                 backward_en=f"Follow the {side_en[lane]} side of the main corridor for about {distance} metres towards the top of the map.",
             )
-    # Lối băng ngang giữa các khối lõi; có nút giữa để vào thang máy, thang bộ, kiosk.
+    # Lối băng ngang giữa các khối lõi; có nút giữa để vào thang máy, thang bộ.
+    # Kiosk đứng ngay giữa lối băng ngang (trước bảng sơ đồ) nên chính nó là nút giữa.
+    middles = {}
     for y in CROSSINGS:
-        stations = ["W"]
-        if any(link in (f"mid-{y}", f"crossing-{y}") for *_, link in landmarks(floor).values()):
+        links = {code: link for code, (*_, link) in landmarks(floor).items()}
+        kiosk = next((code for code, link in links.items() if link == f"crossing-{y}"), None)
+        if kiosk:
+            x, ly, _, label, *_ = landmarks(floor)[kiosk]
+            layout.nodes[floor, kiosk] = Point(x, ly, label)
+            middles[y] = (floor, kiosk)
+        elif f"mid-{y}" in links.values():
             layout.nodes[floor, lane_code("M", y)] = Point(CENTER_X, y, "Sảnh giữa hành lang")
-            stations.append("M")
-        stations.append("E")
-        chain = [(floor, lane_code(lane, y)) for lane in stations]
-        for code, (x, ly, _, label, label_en, link) in landmarks(floor).items():
-            if link == f"crossing-{y}":
-                layout.nodes[floor, code] = Point(x, ly, label)
-                chain.insert(1, (floor, code))
+            middles[y] = (floor, lane_code("M", y))
+        chain = [(floor, lane_code("W", y)), *([middles[y]] if y in middles else []), (floor, lane_code("E", y))]
         for a, b in zip(chain, chain[1:]):
             layout.connect(
                 a, b, "walk",
@@ -243,7 +245,7 @@ def add_hall(layout: Layout, floor: int) -> None:
             source = (floor, lane_code("W", y))
             forward, forward_en = f"Rẽ vào {label} trong lõi hành lang.", f"Turn into {label_en} in the corridor core."
         else:
-            source = (floor, lane_code("M", int(link.removeprefix("mid-"))))
+            source = middles[int(link.removeprefix("mid-"))]
             forward, forward_en = f"Đi tới {label} ở giữa hành lang.", f"Walk to {label_en} in the middle of the corridor."
         layout.connect(
             source, (floor, code), "walk", forward, f"Từ {label}, đi ra hành lang chính.",

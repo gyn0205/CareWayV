@@ -49,19 +49,19 @@ Thư mục `backups/` được gitignore để các bản sao local không bị 
 | --- | ---: |
 | alembic_version | 1 |
 | buildings | 1 |
-| departments | 25 |
+| departments | 26 |
 | floors | 2 |
 | hospital_sites | 1 |
-| kiosks | 2 |
-| navigation_edges | 1476 |
-| navigation_nodes | 737 |
-| rooms | 450 |
-| service_aliases | 29 |
-| service_locations | 450 |
-| services | 428 |
+| kiosks | 4 |
+| navigation_edges | 1806 |
+| navigation_nodes | 817 |
+| rooms | 452 |
+| service_aliases | 39 |
+| service_locations | 452 |
+| services | 430 |
 
 SHA-256 của `carewayv.dump`:
 
 ```text
-f0e48cae9ed6b47293280e42b6009c3ae011013bef5cb5d43550b32184114cd0
+35ca06dcff2e7390dd26ebae44364f43f952d0a3d9d15022ccd0fb8c821a960b
 ```

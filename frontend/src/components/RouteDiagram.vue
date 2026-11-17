@@ -12,7 +12,10 @@ const props = defineProps({
   route: { type: Object, required: true },
   labels: { type: Object, required: true },
   language: { type: String, required: true },
+  // Khoá danh mục khu khi đang tìm đường / đang thu âm.
+  disabled: Boolean,
 })
+defineEmits(['select'])
 
 const floorId = ref(null)
 const show3D = ref(true)
@@ -65,10 +68,14 @@ const duration = computed(() => timeline.value.at(-1)?.ends ?? 0)
 const frame = computed(() => previewFrame(timeline.value, elapsed.value))
 const finished = computed(() => duration.value > 0 && elapsed.value >= duration.value)
 
-// Xanh dương = tuyến đi (tin cậy, dễ thấy trên nền vàng/cam/xanh lá); đỏ san hô = điểm đến.
+// Ghim đỏ "Bạn đang ở đây" như bảng sơ đồ thật; cờ ca rô = điểm đến; tím = chuyển tầng.
 const colors = {
-  origin: '#2466d8', arrival: '#d64534', transfer: '#5843a5',
+  origin: '#e0322b', arrival: '#2c2823', transfer: '#5843a5',
 }
+// Ghim giọt nước, mũi nhọn tại (0, 0); đầu ghim tâm (0, -22).
+const PIN = 'M 0 0 C -3 -6 -12 -13 -12 -22 A 12 12 0 0 1 12 -22 C 12 -13 3 -6 0 0 Z'
+// Ô đen của lá cờ ca rô (cán cờ tại x = 0, cờ từ y = -28 tới -17).
+const FLAG_CHECKS = 'M 0 -28 h 4 v 5.5 h -4 Z M 8 -28 h 4 v 5.5 h -4 Z M 4 -22.5 h 4 v 5.5 h -4 Z M 12 -22.5 h 4 v 5.5 h -4 Z'
 const walker = computed(() => frame.value ?? { point: props.route.origin, walking: false })
 const showWalker = computed(() => !finished.value && walker.value.point.floor_id === floorId.value
   && hasCoordinates(walker.value.point))
@@ -80,13 +87,18 @@ const markers = computed(() => {
   }))
   if (onFloor(origin) && (!onFloor(arrival) || origin.x !== arrival.x || origin.y !== arrival.y)) {
     // Giống nhãn "Bạn đang ở đây" trên bảng sơ đồ thật.
-    points.push({ point: origin, kind: 'origin', text: props.labels.youAreHere })
+    points.unshift({ point: origin, kind: 'origin', text: props.labels.youAreHere })
   }
   if (onFloor(arrival)) {
-    points.push({ point: arrival, kind: 'arrival', text: destination.code })
+    points.push({ point: arrival, kind: 'arrival', text: `${props.labels.end} · ${destination.code}` })
   }
   return points
 })
+// Chữ của các điểm đánh dấu đưa xuống chú thích dưới bản đồ (bỏ trùng) để bản đồ không bị che.
+// (Không dùng new Map: tên Map ở file này là icon lucide.)
+const markerKey = computed(() => markers.value.filter((marker, index, all) => (
+  all.findIndex(({ text }) => text === marker.text) === index
+)))
 
 function mapPoint(point) {
   return [point.x * mapWidth.value, point.y * mapHeight.value]
@@ -177,40 +189,15 @@ function overlaps(a, b) {
     && a.y < b.y + b.height + 6 && a.y + a.height + 6 > b.y
 }
 
-const markedPoints = computed(() => {
-  const occupied = markers.value.map(({ point }) => {
-    const [x, y] = position(point)
-    return { x: x - 11, y: y - 10, width: 22, height: 20 }
-  })
-  return markers.value.map((marker) => {
-    const [x, y] = position(marker.point)
-    const width = marker.text.length * 6.7 + 16
-    const height = 24
-    const right = { x: x + 19, y: y - 12, width, height }
-    const candidates = [
-      right,
-      { ...right, x: x - 19 - width },
-      { ...right, x: x - width / 2, y: y + 17 },
-      { ...right, x: x - width / 2, y: y - 55 },
-    ]
-    const label = candidates.find((candidate) => (
-      candidate.x >= 4 && candidate.x + width <= size.value.width - 4
-      && candidate.y >= 4 && candidate.y + height <= size.value.height - 4
-      && !occupied.some((other) => overlaps(candidate, other))
-    )) ?? right
-    occupied.push(label)
-    return { ...marker, label }
-  })
-})
-
 const CHAR_WIDTH = 6.4
 const LINE_HEIGHT = 13
 
 // Nhãn khu kiểu bảng thật: vòng tròn số + tên khu (tối đa 2 dòng), tránh đè lên nhau.
 const zoneBadges = computed(() => {
-  const occupied = markedPoints.value.flatMap((marker) => {
-    const [x, y] = position(marker.point)
-    return [marker.label, { x: x - 13, y: y - 30, width: 26, height: 44 }]
+  // Chừa chỗ cho ghim / cờ (cao hơn điểm đánh dấu) và vòng chuyển tầng.
+  const occupied = markers.value.map(({ point }) => {
+    const [x, y] = position(point)
+    return { x: x - 13, y: y - 36, width: 30, height: 46 }
   })
   for (const landmark of landmarks.value) {
     const [x, y] = screen(landmark.x, landmark.y)
@@ -551,26 +538,30 @@ onBeforeUnmount(() => {
             </g>
 
 
-            <g v-for="(marker, index) in markedPoints" :key="index">
-              <g :transform="at(...position(marker.point))" :fill="colors[marker.kind]" stroke="white" stroke-width="2.5">
-                <path v-if="marker.kind === 'arrival'" d="M 0 1 C -2 -3 -11 -9 -11 -17 A 11 11 0 0 1 11 -17 C 11 -9 2 -3 0 1 Z" />
-                <circle v-else-if="marker.kind === 'origin' && is3D && showWalker && elapsed === 0"
-                  r="9" fill="none" :stroke="colors.origin" stroke-width="1.6" />
-                <circle v-else r="9" />
-                <circle v-if="marker.kind === 'arrival'" cy="-17" r="3.1" fill="white" stroke="none" />
-                <path v-else-if="marker.kind === 'transfer'" d="M -4 2 V -4 L -6 -2 M -4 -4 L -2 -2 M 4 -2 V 4 L 2 2 M 4 4 L 6 2"
-                  fill="none" stroke-width="1.2" stroke-linecap="round" />
-                <circle v-else-if="!is3D || !showWalker || elapsed > 0" r="3" fill="white" stroke="none" />
+            <!-- Điểm đánh dấu chỉ vẽ ký hiệu; chữ nằm ở chú thích dưới bản đồ -->
+            <g v-for="(marker, index) in markers" :key="index" :transform="at(...position(marker.point))">
+              <title>{{ marker.text }}</title>
+              <g v-if="marker.kind === 'origin'" class="map-pin">
+                <ellipse rx="5" ry="2" class="pin-shadow" />
+                <path :d="PIN" :fill="colors.origin" />
+                <circle cy="-22" r="4.5" fill="white" />
               </g>
-              <g :transform="at(marker.label.x, marker.label.y)">
-                <rect :width="marker.label.width" :height="marker.label.height" rx="6" class="map-marker-label"
-                  :stroke="colors[marker.kind]" />
-                <text x="8" y="16" class="marker-label" :fill="colors[marker.kind]">{{ marker.text }}</text>
+              <g v-else-if="marker.kind === 'arrival'" class="map-flag" transform="scale(1.3)">
+                <ellipse rx="5" ry="2" class="pin-shadow" />
+                <path d="M 0 0 V -28" class="flag-pole" />
+                <rect y="-28" width="16" height="11" class="flag-cloth" />
+                <path :d="FLAG_CHECKS" :fill="colors.arrival" />
+              </g>
+              <g v-else :fill="colors.transfer" stroke="white" stroke-width="2.5">
+                <circle r="9" />
+                <path d="M -4 2 V -4 L -6 -2 M -4 -4 L -2 -2 M 4 -2 V 4 L 2 2 M 4 4 L 6 2"
+                  fill="none" stroke-width="1.2" stroke-linecap="round" />
               </g>
             </g>
 
-            <!-- Người dẫn đường 2D: huy hiệu tròn có biểu tượng người + mũi tên hướng đi -->
-            <g v-if="showWalker && !is3D" :transform="at(...position(walker.point))" aria-hidden="true"
+            <!-- Người dẫn đường 2D: huy hiệu tròn có biểu tượng người + mũi tên hướng đi.
+                 Chưa phát mô phỏng thì ẩn để không che ghim "Bạn đang ở đây". -->
+            <g v-if="showWalker && !is3D && elapsed > 0":transform="at(...position(walker.point))" aria-hidden="true"
               class="map-guide" :class="{ 'is-walking': playing && walker.walking }">
               <ellipse cy="15" rx="11" ry="3.8" class="guide-shadow" />
               <circle r="16" class="guide-pulse" />
@@ -604,11 +595,15 @@ onBeforeUnmount(() => {
       <aside v-if="directory.length" class="zone-directory" :aria-label="labels.directory(floor?.label)">
         <h3>{{ labels.directory(floor?.label) }}</h3>
         <ol>
+          <!-- Bấm vào khu → tìm đường ngay tới khu đó (khu đang là đích thì không cần bấm) -->
           <li v-for="item in directory" :key="item.code"
             :class="[item.tone && `tone-${item.tone}`, { 'is-target': item.target }]">
-            <span class="directory-number">{{ item.number }}</span>
-            <span class="directory-name">{{ item.name }}</span>
-            <span v-if="item.target" class="directory-tag">{{ labels.end }}</span>
+            <button type="button" class="directory-item" :disabled="item.target || disabled"
+              :aria-current="item.target ? 'location' : undefined" @click="$emit('select', item.code)">
+              <span class="directory-number">{{ item.number }}</span>
+              <span class="directory-name">{{ item.name }}</span>
+              <span v-if="item.target" class="directory-tag">{{ labels.end }}</span>
+            </button>
           </li>
         </ol>
       </aside>
@@ -628,11 +623,20 @@ onBeforeUnmount(() => {
       {{ finished ? labels.end : frame?.step.instruction }}
     </p>
 
+    <!-- Chú thích các điểm trên tầng đang xem (thay cho nhãn nổi trên bản đồ) -->
     <div v-if="drawing.points.length" class="diagram-key">
-      <span><i class="origin-key"></i>{{ labels.start }}</span>
       <span><i class="path-key"></i>{{ labels.path }}</span>
-      <span><i class="arrival-key"></i>{{ labels.end }}</span>
-      <span v-if="floors.length > 1"><ArrowDownUp :size="13" />{{ labels.changeFloor }}</span>
+      <span v-for="marker in markerKey" :key="marker.text" :class="`key-${marker.kind}`">
+        <svg v-if="marker.kind === 'origin'" viewBox="-13 -36 26 38" aria-hidden="true">
+          <path :d="PIN" :fill="colors.origin" stroke="white" stroke-width="1.5" /><circle cy="-22" r="4.5" fill="white" />
+        </svg>
+        <svg v-else-if="marker.kind === 'arrival'" viewBox="-4 -31 22 33" aria-hidden="true">
+          <path d="M 0 0 V -28" class="flag-pole" /><rect y="-28" width="16" height="11" class="flag-cloth" />
+          <path :d="FLAG_CHECKS" :fill="colors.arrival" />
+        </svg>
+        <ArrowDownUp v-else :size="14" />
+        {{ marker.text }}
+      </span>
     </div>
     <!-- Chú giải ký hiệu giống chân bảng sơ đồ thật -->
     <div v-if="detailedPlan" class="map-legend">
