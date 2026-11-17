@@ -28,8 +28,8 @@ CORE_BLOCKS = (
     ("lift", 462, 760, 76, 62),
     ("exit_stair", 462, 850, 76, 28),
     ("restroom", 462, 886, 76, 42),
-    # Bảng sơ đồ tầng: chỉ 2 bảng, đặt sát mép trên và mép dưới giếng sảnh (giếng 428–720).
-    # Phía sau thang máy là thang nhân viên, không có bảng.
+    # Bảng sơ đồ tầng: 2 bảng mỗi tầng (4 bảng cả hai tầng), sát mép trên và mép dưới
+    # giếng sảnh (giếng 428–720); mỗi bảng là một vị trí kiosk. Sau thang máy không có bảng.
     ("board", 482, 418, 36, 8),
     ("board", 482, 722, 36, 8),
 )
@@ -51,7 +51,9 @@ LANDMARKS = {
     "WC-A": (500, 221, "restroom", "WC đầu hành lang", "the restroom at the top of the corridor", "west"),
     "LIFT-A": (500, 358, "elevator", "Thang máy A", "elevator A", "mid-410"),
     "STAIRS": (500, 680, "stairs", "Cầu thang bộ giữa sảnh", "the stairs in the atrium", "mid-740"),
-    "KIOSK": (470, 740, "kiosk", "Kiosk chỉ đường", "the wayfinding kiosk", "crossing-740"),
+    # Hai kiosk mỗi tầng, đứng ở lối băng ngang ngay trước bảng sơ đồ cạnh thang máy A / B.
+    "KIOSK-A": (470, 410, "kiosk", "Kiosk chỉ đường cạnh thang máy A", "the wayfinding kiosk by elevator A", "crossing-410"),
+    "KIOSK": (470, 740, "kiosk", "Kiosk chỉ đường cạnh thang máy B", "the wayfinding kiosk by elevator B", "crossing-740"),
     "LIFT-B": (500, 791, "elevator", "Thang máy B", "elevator B", "mid-740"),
     "WC-B": (500, 907, "restroom", "WC cuối hành lang", "the restroom at the bottom of the corridor", "west"),
 }

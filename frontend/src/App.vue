@@ -11,7 +11,16 @@ import RoutePanel from './components/RoutePanel.vue'
 import VoiceInput from './components/VoiceInput.vue'
 
 const language = ref('vi')
-const kioskFloor = ref(3)
+// 4 kiosk = 4 bảng sơ đồ: mỗi tầng một bảng cạnh thang máy A và một bảng cạnh thang máy B.
+const kiosks = [
+  { code: 'KIOSK-3-A', floor: 3, lift: 'A' },
+  { code: 'KIOSK-3', floor: 3, lift: 'B' },
+  { code: 'KIOSK-4-A', floor: 4, lift: 'A' },
+  { code: 'KIOSK-4', floor: 4, lift: 'B' },
+]
+const kioskCode = ref('KIOSK-3')
+const kiosk = computed(() => kiosks.find(({ code }) => code === kioskCode.value))
+const kioskFloor = computed(() => kiosk.value.floor)
 const wheelchair = ref(false)
 const query = ref('')
 const result = ref(null)
@@ -50,7 +59,7 @@ async function startOver() {
   searchSection.value?.scrollIntoView({ block: 'start' })
 }
 
-watch([language, kioskFloor], () => {
+watch([language, kioskCode], () => {
   document.documentElement.lang = language.value
   reset()
 })
@@ -67,7 +76,7 @@ async function submit(kind, prepare, newSearch = false) {
     ? { ...result.value.context, wheelchair: wheelchair.value }
     : null
   const payload = {
-    kiosk_code: `KIOSK-${kioskFloor.value}`,
+    kiosk_code: kioskCode.value,
     wheelchair: wheelchair.value,
     language: language.value,
     context,
@@ -145,9 +154,10 @@ onBeforeUnmount(() => {
       <div class="header-controls">
         <label class="select-control">
           <MapPin :size="18" aria-hidden="true" />
-          <select v-model="kioskFloor" :aria-label="labels.kiosk">
-            <option :value="3">{{ labels.kioskAt(3) }}</option>
-            <option :value="4">{{ labels.kioskAt(4) }}</option>
+          <select v-model="kioskCode" :aria-label="labels.kiosk">
+            <option v-for="item in kiosks" :key="item.code" :value="item.code">
+              {{ labels.kioskAt(item.floor, item.lift) }}
+            </option>
           </select>
           <ChevronDown :size="15" aria-hidden="true" class="select-arrow" />
         </label>
@@ -212,7 +222,7 @@ onBeforeUnmount(() => {
         <p v-if="problem" class="error-message" role="alert"><CircleAlert :size="20" /> {{ problem }}</p>
       </section>
       <div ref="routeSection" class="route-section">
-        <RoutePanel :labels="labels" :kiosk-floor="kioskFloor" :result="result" :audio-url="audioUrl"
+        <RoutePanel :labels="labels" :kiosk="kiosk" :result="result" :audio-url="audioUrl"
           :busy="busy" :input-locked="inputLocked" @select="submitText" @reset="startOver" />
       </div>
     </div>

@@ -117,13 +117,15 @@ def seed(session) -> dict[str, int]:
     # Đồ thị cũ (bản sơ đồ trước) bị ẩn đi để chỉ còn lối đi theo mặt bằng mới.
     retire(session, NavigationEdge, scope, edges)
     retire(session, NavigationNode, scope, nodes)
+    # 4 kiosk = 4 bảng sơ đồ (2 bảng mỗi tầng). Giữ mã KIOSK-3/KIOSK-4 (thang máy B) cho client cũ.
     kiosks = sync(
         session, Kiosk, scope, ("code",), [
             {
-                "code": f"KIOSK-{floor}", "name": f"Kiosk tầng {floor}",
-                "origin_node_id": node_id((floor, "KIOSK")), "is_active": True,
+                "code": code, "name": f"Kiosk tầng {floor} · thang máy {lift}",
+                "origin_node_id": node_id((floor, node)), "is_active": True,
             }
             for floor in FLOORS
+            for code, node, lift in ((f"KIOSK-{floor}-A", "KIOSK-A", "A"), (f"KIOSK-{floor}", "KIOSK", "B"))
         ],
     )
     slots = [slot for zone in ZONES for slot in room_slots(zone)]

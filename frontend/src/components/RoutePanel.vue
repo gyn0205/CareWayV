@@ -8,7 +8,7 @@ import { hasCoordinates } from '../route-map'
 
 const props = defineProps({
   labels: { type: Object, required: true },
-  kioskFloor: { type: Number, required: true },
+  kiosk: { type: Object, required: true },
   result: Object,
   audioUrl: String,
   busy: Boolean,
@@ -64,7 +64,7 @@ function destinationName(destination) {
         </div>
         <h3>{{ labels.ready }}</h3>
         <p>{{ labels.readyHelp }}</p>
-        <div class="origin-pill"><LocateFixed :size="16" /> {{ labels.kioskAt(kioskFloor) }}</div>
+        <div class="origin-pill"><LocateFixed :size="16" /> {{ labels.kioskAt(kiosk.floor, kiosk.lift) }}</div>
       </div>
       <template v-else>
         <p v-if="result.transcript" class="transcript">

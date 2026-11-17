@@ -84,15 +84,17 @@ class FloorPlanGeometryTest(unittest.TestCase):
                     if other is not zone:
                         self.assertFalse(inside(list(SHAPES[other.code].outline), *center), (zone.code, other.code))
 
-    def test_every_room_is_reachable_from_both_kiosks_and_doors_match_the_plan(self):
+    def test_every_room_is_reachable_from_all_four_kiosks_and_doors_match_the_plan(self):
         layout = build_layout()
         neighbors = defaultdict(list)
         for edge in layout.edges:
             neighbors[edge.origin].append((edge.destination, edge.cost))
             self.assertGreater(edge.cost, 0)
-        for level in (3, 4):
-            distance = {(level, "KIOSK"): 0}
-            frontier = [(0, (level, "KIOSK"))]
+        kiosks = [key for key in layout.nodes if key[1].startswith("KIOSK")]
+        self.assertEqual(len(kiosks), 4)
+        for start in kiosks:
+            distance = {start: 0}
+            frontier = [(0, start)]
             while frontier:
                 cost, node = heapq.heappop(frontier)
                 if cost > distance[node]:
@@ -101,7 +103,7 @@ class FloorPlanGeometryTest(unittest.TestCase):
                     if cost + step < distance.get(target, float("inf")):
                         distance[target] = cost + step
                         heapq.heappush(frontier, (cost + step, target))
-            self.assertEqual(set(layout.nodes) - set(distance), set())
+            self.assertEqual(set(layout.nodes) - set(distance), set(), start)
         for zone in ZONES:
             for slot in room_slots(zone):
                 point = layout.nodes[zone.floor, slot.code]
@@ -144,6 +146,23 @@ class FloorPlanGeometryTest(unittest.TestCase):
                     ))
             # Mỗi thang có đúng một bảng, ở đầu quay về giếng sảnh.
             self.assertEqual(sorted(board.y < void.y for board in boards), [False, True])
+
+    def test_each_map_board_has_its_own_kiosk(self):
+        layout = build_layout()
+        for level in (3, 4):
+            plan = demo_floor_plan(level * 10, level)
+            boards = [block for block in plan.blocks if block.kind == "board"]
+            kiosks = [mark for mark in plan.landmarks if mark.kind == "kiosk"]
+            self.assertEqual(len(kiosks), len(boards))
+            for board in boards:
+                with self.subTest(floor=level, board=board.y):
+                    # Đúng một kiosk đứng cách bảng không quá 15 đơn vị (theo chiều dọc).
+                    near = [k for k in kiosks if abs(k.y - (board.y + board.height / 2)) <= 15]
+                    self.assertEqual(len(near), 1)
+                    # Mốc vẽ trên bản đồ trùng nút điều hướng của kiosk.
+                    [code] = [k.code for k in near]
+                    node = layout.nodes[level, code]
+                    self.assertEqual((node.x, node.y), (near[0].x, near[0].y))
 
     def test_exit_signs_hang_on_an_outer_wall_without_covering_rooms(self):
         for level, signs in EXITS.items():

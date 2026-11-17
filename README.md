@@ -127,12 +127,15 @@ Nếu container frontend đang giữ cổng 5173, chạy Vite bằng `npm run de
 
 Tên và thứ tự các khu dựa trên hai ảnh biển sơ đồ. Phòng, tọa độ hành lang,
 chỉ dẫn từng đoạn, khoảng cách, thời gian và khả năng tiếp cận là dữ liệu giả lập.
-Các nút và cạnh trong PostgreSQL mô tả đường từ hai kiosk tới lối vào khu và
+Các nút và cạnh trong PostgreSQL mô tả đường từ bốn kiosk tới lối vào khu và
 cửa phòng. Cột `floors.map_asset_url` để trống vì API dựng mặt bằng mô phỏng
 từ cùng bộ tọa độ đã dùng để nạp đồ thị. Kiosk hiển thị toàn cảnh tầng từ trên xuống
 ở chế độ 3D hoặc 2D, cho phép chọn tầng, kéo và thu phóng. Nút **Mô phỏng đường đi**
 cho người que đi theo tuyến và tự chuyển tầng qua thang máy hoặc cầu thang.
 Đây là bản xem trước từ kiosk; không dùng vị trí trực tiếp của người xem.
+
+Mỗi tầng có hai bảng sơ đồ ở hai đầu giếng sảnh, mỗi bảng là một kiosk:
+`KIOSK-3-A`, `KIOSK-4-A` cạnh thang máy A và `KIOSK-3`, `KIOSK-4` cạnh thang máy B.
 
 Bộ dữ liệu có 20 phòng cho mỗi nhóm chuyên môn, 6 điểm phục vụ của nhà thuốc
 và 2 điểm tại mỗi quầy thanh toán, tổng cộng 450 phòng/điểm phục vụ trong 25 khu.

@@ -191,6 +191,17 @@ def find_route(
                 if edge.kind == "walk" else f"Dùng {method} để đến tầng {end.floor}."
             )
             instruction = edge.instruction or fallback
+        # Một lối băng ngang bị chia thành nhiều cạnh (qua kiosk, sảnh giữa) → gộp thành một bước,
+        # chỉ khi thẳng hàng để sơ đồ vẫn vẽ đúng đường.
+        last = steps[-1] if steps else None
+        if (
+            last and last.kind == edge.kind == "walk" and last.instruction == instruction
+            and last.start.floor_id == end.floor_id
+            and None not in (last.start.x, last.start.y, last.end.x, last.end.y, end.x, end.y)
+            and (last.start.x == last.end.x == end.x or last.start.y == last.end.y == end.y)
+        ):
+            steps[-1] = last.model_copy(update={"end": end, "seconds": last.seconds + edge.cost_seconds})
+            continue
         steps.append(Step(
             kind=edge.kind, seconds=edge.cost_seconds, start=start, end=end,
             instruction=instruction,

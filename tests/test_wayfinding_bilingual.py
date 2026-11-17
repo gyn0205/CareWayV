@@ -100,6 +100,33 @@ class BilingualWayfindingTest(unittest.TestCase):
                 self.assert_route(result, code, language)
         self.openrouter.assert_not_called()
 
+    def test_all_four_kiosks_start_at_their_own_map_board(self):
+        origins = {}
+        kiosks = (("KIOSK-3-A", 3), ("KIOSK-3", 3), ("KIOSK-4-A", 4), ("KIOSK-4", 4))
+        for (code, floor), room in ((kiosk, room) for kiosk in kiosks for room in ("3-10-01", "4-04-11")):
+            with self.subTest(kiosk=code, room=room):
+                status, result = self.submit("text", kiosk_code=code, text=room)
+                self.assertEqual(status, 200)
+                self.assert_route(result, room, "vi")
+                # Không đọc lặp một câu cho cùng một lối đi thẳng (vd. "Băng ngang hành lang…" hai lần).
+                steps = result["route"]["steps"]
+                self.assertFalse(any(
+                    a["instruction"] == b["instruction"] and a["start"]["y"] == a["end"]["y"] == b["end"]["y"]
+                    for a, b in zip(steps, steps[1:])
+                ))
+                origin = result["route"]["origin"]
+                self.assertEqual(origin["floor"], floor)
+                # Điểm xuất phát trùng mốc kiosk vẽ trên mặt bằng tầng đó.
+                plan = next(p for p in result["route"]["floor_plans"] if p["floor_id"] == origin["floor_id"])
+                self.assertTrue(any(
+                    mark["kind"] == "kiosk"
+                    and abs(origin["x"] * plan["width"] - mark["x"]) < 1e-6
+                    and abs(origin["y"] * plan["height"] - mark["y"]) < 1e-6
+                    for mark in plan["landmarks"]
+                ))
+                origins[code] = (origin["floor"], origin["x"], origin["y"])
+        self.assertEqual(len(set(origins.values())), 4)
+
     def test_cashier_route_fits_the_floor_plans_on_both_sides_of_the_elevator(self):
         status, result = self.submit(
             "text", kiosk_code="KIOSK-4", text="3-10-01", wheelchair=True,
