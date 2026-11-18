@@ -3,6 +3,7 @@
 import base64
 import binascii
 import re
+from collections.abc import Iterator
 
 from sqlalchemy.orm import Session
 
@@ -40,6 +41,46 @@ def voice_provider() -> ElevenLabsVoice | OpenRouterVoice | None:
     return None
 
 
+def not_configured(language: Language) -> WayfindingError:
+    return WayfindingError("voice_not_configured", (
+        "Voice is not configured. Please use the text wayfinding API." if language == "en" else
+        "Chưa cấu hình giọng nói. Anh chị có thể dùng API chỉ đường bằng văn bản."
+    ))
+
+
+def realtime_session(language: Language) -> dict[str, str]:
+    """WebSocket URL (with a single-use token) for live speech recognition in the kiosk browser."""
+    if settings.ELEVENLABS_API_KEY is None:
+        # Chỉ ElevenLabs có STT realtime; kiosk tự lùi về chế độ bấm để nói.
+        raise not_configured(language)
+    try:
+        url = ElevenLabsVoice(settings.ELEVENLABS_API_KEY.get_secret_value()).realtime_url(language)
+    except VoiceUnavailable:
+        message = (
+            "Live speech recognition is unavailable. Please try again." if language == "en" else
+            "Chưa kết nối được nhận dạng giọng nói. Anh chị vui lòng thử lại."
+        )
+        raise WayfindingError("transcription_failed", message) from None
+    return {"url": url}
+
+
+def speech_stream(text: str, language: Language, pcm: bool = False) -> Iterator[bytes]:
+    """Spoken reply as a stream; OpenRouter has no stream (nor PCM), so it sends the whole MP3 at once."""
+    provider = voice_provider()
+    if provider is None:
+        raise not_configured(language)
+    spoken = read_room_codes(text, language)
+    try:
+        if isinstance(provider, ElevenLabsVoice):
+            return provider.stream(spoken, language, pcm)
+        if pcm:
+            raise VoiceUnavailable
+        return iter([provider.speak(spoken, language)])
+    except VoiceUnavailable:
+        message = "Speech is unavailable." if language == "en" else "Chưa đọc được câu trả lời."
+        raise WayfindingError("speech_failed", message) from None
+
+
 def process_voice_turn(db: Session, turn: VoiceTurn) -> VoiceResult:
     context = kiosk_context(turn)
     previous = context.language if context else None
@@ -58,11 +99,7 @@ def process_voice_turn(db: Session, turn: VoiceTurn) -> VoiceResult:
 
     provider = voice_provider()
     if provider is None:
-        message = (
-            "Voice is not configured. Please use the text wayfinding API." if language == "en" else
-            "Chưa cấu hình giọng nói. Anh chị có thể dùng API chỉ đường bằng văn bản."
-        )
-        raise WayfindingError("voice_not_configured", message)
+        raise not_configured(language)
     kiosk = kiosk_for(db, turn.kiosk_code, language)
     # Release the read transaction during both upstream audio calls.
     kiosk_code = kiosk.code

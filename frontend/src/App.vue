@@ -1,11 +1,13 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
-  Accessibility, ArrowRight, ChevronDown, CircleAlert, Compass, HeartPulse, Info, MapPin, Pill, Stethoscope, WalletCards,
+  Accessibility, ArrowRight, ChevronDown, CircleAlert, Compass, HeartPulse, Info, MapPin, Pill, Stethoscope, Volume2,
+  WalletCards,
 } from '@lucide/vue'
-import { audioBase64, replyUrl, requestDirections, requestKioskMap } from './api'
+import { audioBase64, replyUrl, requestDirections, requestKioskMap, speechUrl } from './api'
 import { copy } from './copy'
 import { MAX_AUDIO_BYTES } from './recording'
+import { createConversation, supportsConversation } from './realtime'
 import RouteDiagram from './components/RouteDiagram.vue'
 import RoutePanel from './components/RoutePanel.vue'
 import VoiceInput from './components/VoiceInput.vue'
@@ -38,6 +40,10 @@ const problem = ref('')
 const audioUrl = ref('')
 const voiceActive = ref(false)
 const voiceKey = ref(0)
+// Trò chuyện realtime (mặc định); tắt khi máy chủ chưa có STT realtime → lùi về bấm để nói.
+const liveVoice = ref(supportsConversation())
+const talk = ref('off')
+const heard = ref('')
 // Câu khách đã hỏi (nối các câu trả lời bổ sung bằng "→" để thấy mạch hội thoại).
 const said = ref('')
 const activeStep = ref(-1)
@@ -58,6 +64,9 @@ let mapRetry
 let lastTurn
 let idleTimer
 let clockTimer
+let conversation
+// Ngữ cảnh của câu nói gần nhất: khách nói tiếp thì gộp câu và hỏi lại trên đúng ngữ cảnh đó.
+let spokenTurn
 
 // Lối tắt hiển thị tên theo ngôn ngữ đang chọn, kèm tên ở ngôn ngữ còn lại như prototype.
 const shortcuts = computed(() => labels.value.choices.map((choice, index) => ({
@@ -80,6 +89,7 @@ function reset() {
   said.value = ''
   voiceActive.value = false
   voiceKey.value++
+  stopTalk()
   clearAudio()
   try { speechSynthesis.cancel() } catch { /* không hỗ trợ giọng đọc */ }
 }
@@ -101,6 +111,52 @@ async function loadKioskMap() {
   }
 }
 
+function stopTalk() {
+  conversation?.stop()
+}
+
+function startTalk() {
+  if (conversation || busy.value) return
+  problem.value = ''
+  const session = conversation = createConversation({
+    language: language.value,
+    onState(value) {
+      if (conversation !== session) return
+      talk.value = value
+      if (value === 'off') conversation = undefined
+    },
+    onHeard(text) {
+      if (conversation === session) heard.value = text
+    },
+    onUtterance: submitSpoken,
+    // Khách nói tiếp khi kiosk đang tìm câu trước → bỏ yêu cầu đó, chờ câu đầy đủ.
+    onInterrupt() {
+      activeRequest?.abort()
+      activeRequest = undefined
+      busy.value = false
+    },
+    onError(key) {
+      if (key === 'liveUnconfigured') liveVoice.value = false
+      showProblem(key)
+    },
+  })
+  session.start()
+}
+
+function submitSpoken(text, continuation) {
+  // Giọng khách là ý mới nhất → thay cho yêu cầu (gõ / bấm) đang chạy.
+  if (busy.value) {
+    activeRequest?.abort()
+    activeRequest = undefined
+    busy.value = false
+  }
+  if (!continuation || !spokenTurn) {
+    const context = contextFor(false)
+    spokenTurn = { context, saidBase: context ? said.value : '' }
+  }
+  submit('text', () => ({ text }), spokenTurn.context, spokenTurn.saidBase, { text, shown: text }, true)
+}
+
 watch(kioskCode, () => {
   reset()
   loadKioskMap()
@@ -109,6 +165,8 @@ watch(kioskCode, () => {
 // Đổi ngôn ngữ giữa chừng: hỏi lại đúng câu cũ bằng ngôn ngữ mới thay vì xoá kết quả.
 watch(language, (value) => {
   document.documentElement.lang = value
+  // STT realtime nghe theo một ngôn ngữ → đổi ngôn ngữ thì khách bấm mic lại.
+  stopTalk()
   problem.value = ''
   if (result.value && lastTurn && !inputLocked.value) {
     const { text, shown, context, saidBase } = lastTurn
@@ -128,8 +186,11 @@ function contextFor(newSearch) {
 
 // saidBase: phần hội thoại trước đó; turn.text: câu gửi đi, turn.shown: chữ hiện cho khách.
 // Giọng nói thì chỉ biết câu sau khi có bản chép lời.
-async function submit(kind, prepare, context, saidBase, turn = {}) {
+// spoken: câu đến từ hội thoại realtime → đọc câu trả lời bằng TTS stream.
+async function submit(kind, prepare, context, saidBase, turn = {}, spoken = false) {
   if (busy.value) return
+  // Khách bấm / gõ trong lúc kiosk đang đọc → im để khỏi đọc câu cũ.
+  if (!spoken) conversation?.hush()
   const controller = new AbortController()
   activeRequest = controller
   const payload = {
@@ -155,7 +216,12 @@ async function submit(kind, prepare, context, saidBase, turn = {}) {
     walkDone.value = false
     wheelchair.value = answer.context?.wheelchair ?? wheelchair.value
     query.value = ''
-    if (answer.audio_base64) {
+    if (spoken) {
+      // false: khách đã nói tiếp → không đọc đè, câu gộp sẽ được hỏi lại.
+      if (conversation?.speak(speechUrl(answer.message, answer.language, 'pcm'), answer.message)) {
+        audioUrl.value = speechUrl(answer.message, answer.language)
+      }
+    } else if (answer.audio_base64) {
       try {
         audioUrl.value = replyUrl(answer.audio_base64, answer.audio_media_type)
       } catch {
@@ -164,6 +230,7 @@ async function submit(kind, prepare, context, saidBase, turn = {}) {
     }
   } catch (error) {
     if (controller.signal.aborted) return
+    if (spoken) conversation?.done()
     said.value = saidBefore
     if (kind === 'voice' && error.status === 503) {
       showProblem('voiceUnavailable')
@@ -207,7 +274,7 @@ function onProgress(step, done) {
 }
 
 /* ---------- Tự về màn hình chính khi không ai dùng ---------- */
-const idleActive = computed(() => !DEMO && Boolean(result.value) && !inputLocked.value)
+const idleActive = computed(() => !DEMO && Boolean(result.value) && !inputLocked.value && talk.value === 'off')
 watch(idleActive, (on) => {
   clearInterval(idleTimer)
   idleLeft.value = IDLE_SECONDS
@@ -274,6 +341,7 @@ onBeforeUnmount(() => {
   clearTimeout(mapRetry)
   clearInterval(idleTimer)
   clearInterval(clockTimer)
+  stopTalk()
   document.removeEventListener('pointerdown', stillHere, true)
   document.removeEventListener('keydown', stillHere, true)
   clearAudio()
@@ -324,8 +392,8 @@ onBeforeUnmount(() => {
             <h1>{{ labels.hello }}</h1>
             <p class="sub">{{ labels.helloAlt }}</p>
           </div>
-          <VoiceInput :key="voiceKey" :labels="labels" :busy="busy"
-            @submit="submitAudio" @problem="showProblem" @activity="onVoiceActivity" />
+          <VoiceInput :key="voiceKey" :labels="labels" :busy="busy || talk !== 'off'" :live="liveVoice"
+            @live="startTalk" @submit="submitAudio" @problem="showProblem" @activity="onVoiceActivity" />
           <div class="or">{{ labels.orType }}</div>
           <form class="ask" @submit.prevent="submitText()">
             <input v-model="query" type="text" required maxlength="500" autocomplete="off"
@@ -374,13 +442,27 @@ onBeforeUnmount(() => {
                   :aria-label="result.status === 'clarify' ? labels.reply : labels.guess">
                 <button type="submit" :disabled="inputLocked" :aria-label="labels.search"><ArrowRight :size="22" /></button>
               </form>
-              <VoiceInput :key="voiceKey" compact :labels="labels" :busy="busy"
-                @submit="submitAudio" @problem="showProblem" @activity="onVoiceActivity" />
+              <VoiceInput :key="voiceKey" compact :labels="labels" :busy="busy || talk !== 'off'" :live="liveVoice"
+                @live="startTalk" @submit="submitAudio" @problem="showProblem" @activity="onVoiceActivity" />
             </div>
           </template>
         </RoutePanel>
 
         <p v-if="problem" class="error-message" role="alert"><CircleAlert :size="20" /> {{ problem }}</p>
+      </div>
+
+      <!-- Thanh hội thoại realtime: luôn thấy kiosk đang nghe / đang trả lời và chữ khách vừa nói -->
+      <div v-if="talk !== 'off'" class="live" :class="talk" role="status">
+        <div v-if="talk === 'listening'" class="bars" aria-hidden="true"><i v-for="bar in 5" :key="bar"></i></div>
+        <Volume2 v-else-if="talk === 'speaking'" :size="24" aria-hidden="true" />
+        <span v-else class="spinner small" aria-hidden="true"></span>
+        <p class="live-text">
+          <b>{{ labels.live[talk] }}</b>
+          <span v-if="heard">“{{ heard }}”</span>
+          <small v-else>{{ labels.liveHint }}</small>
+        </p>
+        <button v-if="talk === 'speaking'" type="button" class="ghost" @click="conversation?.hush()">{{ labels.liveSkip }}</button>
+        <button type="button" class="ghost" @click="stopTalk">{{ labels.liveEnd }}</button>
       </div>
 
       <div class="panel-foot">

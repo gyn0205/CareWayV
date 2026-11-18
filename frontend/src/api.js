@@ -31,6 +31,20 @@ export async function requestKioskMap(code, language, signal) {
   return data
 }
 
+// URL WebSocket (kèm token dùng một lần) để trình duyệt stream mic thẳng tới STT realtime.
+export async function requestRealtime(language, signal) {
+  const response = await fetch(`/gateway/realtime?language=${language}`, { method: 'POST', signal })
+  const data = await response.json().catch(() => null)
+  if (!response.ok || typeof data?.url !== 'string') {
+    throw new WayfindingRequestError(typeof data?.detail === 'string' ? data.detail : '', response.status)
+  }
+  return data
+}
+
+// Giọng đọc câu trả lời dạng stream. mp3 cho thẻ <audio> (nghe lại); pcm cho hội thoại realtime.
+export const speechUrl = (text, language, format = 'mp3') =>
+  `/gateway/speech?language=${language}&format=${format}&text=${encodeURIComponent(text)}`
+
 export function audioBase64(blob) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()

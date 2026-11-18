@@ -4,7 +4,9 @@ import base64
 import json
 import logging
 import uuid
+from collections.abc import Iterator
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from app.core.config import settings
@@ -35,7 +37,8 @@ class ElevenLabsVoice:
     def __init__(self, api_key: str):
         self.api_key = api_key
 
-    def post(self, path: str, body: bytes, content_type: str, max_bytes: int) -> bytes:
+    def open(self, path: str, body: bytes, content_type: str):
+        """Send one request and return the open response (caller closes it)."""
         request = Request(
             f"{BASE_URL}/{path}",
             data=body,
@@ -43,8 +46,7 @@ class ElevenLabsVoice:
             method="POST",
         )
         try:
-            with urlopen(request, timeout=TIMEOUT_SECONDS) as response:
-                data = response.read(max_bytes + 1)
+            return urlopen(request, timeout=TIMEOUT_SECONDS)
         except HTTPError as error:
             # ElevenLabs puts the reason (quota, invalid key, voice not allowed) in the body.
             detail = error.read(500).decode(errors="replace")
@@ -53,6 +55,14 @@ class ElevenLabsVoice:
             raise VoiceUnavailable from None
         except (URLError, OSError) as error:
             logger.warning("ElevenLabs %s connection failed (%s)", path.split("/")[0], type(error).__name__)
+            raise VoiceUnavailable from None
+
+    def post(self, path: str, body: bytes, content_type: str, max_bytes: int) -> bytes:
+        try:
+            with self.open(path, body, content_type) as response:
+                data = response.read(max_bytes + 1)
+        except OSError as error:
+            logger.warning("ElevenLabs %s read failed (%s)", path.split("/")[0], type(error).__name__)
             raise VoiceUnavailable from None
         if not data or len(data) > max_bytes:
             raise VoiceUnavailable
@@ -91,3 +101,48 @@ class ElevenLabsVoice:
         if not (audio.startswith(b"ID3") or (len(audio) > 2 and audio[0] == 0xFF and audio[1] & 0xE0 == 0xE0)):
             raise VoiceUnavailable
         return audio
+
+    def realtime_url(self, language: Language) -> str:
+        """Mint a single-use token so the kiosk browser streams the mic straight to Scribe Realtime."""
+        data = self.post(
+            "single-use-token/realtime_scribe?max_session_duration_seconds=900", b"{}", "application/json", 4_000,
+        )
+        try:
+            token = json.loads(data)["token"]
+        except (ValueError, UnicodeError, KeyError, TypeError):
+            raise VoiceUnavailable from None
+        if not isinstance(token, str):
+            raise VoiceUnavailable
+        # Server VAD chốt câu sau khoảng lặng này; ngắn hơn thì nhanh hơn nhưng dễ cắt ngang câu khách.
+        query = urlencode({
+            "model_id": settings.ELEVENLABS_REALTIME_MODEL,
+            "token": token,
+            "audio_format": "pcm_16000",
+            "language_code": language,
+            "commit_strategy": "vad",
+            "vad_silence_threshold_secs": settings.VOICE_END_SILENCE_SECS,
+        })
+        return f"wss://api.elevenlabs.io/v1/speech-to-text/realtime?{query}"
+
+    def stream(self, text: str, language: Language, pcm: bool = False) -> Iterator[bytes]:
+        """Stream audio as ElevenLabs produces it, so playback starts on the first chunk.
+
+        pcm: raw 16-bit 24 kHz mono, which the kiosk plays chunk by chunk without the MP3 buffering delay.
+        """
+        payload = {"text": text, "model_id": settings.ELEVENLABS_TTS_MODEL, "language_code": language}
+        output = "pcm_24000" if pcm else "mp3_44100_128"
+        response = self.open(
+            f"text-to-speech/{settings.ELEVENLABS_VOICE_ID}/stream?output_format={output}",
+            json.dumps(payload).encode(), "application/json",
+        )
+
+        def chunks():
+            with response:
+                try:
+                    while chunk := response.read1(16_384):
+                        yield chunk
+                except OSError as error:
+                    # Đã gửi header 200: chỉ có thể dừng luồng, trình duyệt phát phần đã nhận.
+                    logger.warning("ElevenLabs speech stream broke (%s)", type(error).__name__)
+
+        return chunks()

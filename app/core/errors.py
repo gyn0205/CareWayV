@@ -20,6 +20,7 @@ class WayfindingError(Exception):
         self,
         code: Literal[
             "kiosk_not_found", "kiosk_conflict", "invalid_audio", "voice_not_configured", "transcription_failed",
+            "speech_failed",
         ],
         message: str,
     ):

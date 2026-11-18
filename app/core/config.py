@@ -14,6 +14,7 @@ DEFAULT_WAYFINDING_ERROR_STATUS = {
     "invalid_audio": HTTPStatus.UNPROCESSABLE_ENTITY,
     "voice_not_configured": HTTPStatus.SERVICE_UNAVAILABLE,
     "transcription_failed": HTTPStatus.BAD_GATEWAY,
+    "speech_failed": HTTPStatus.BAD_GATEWAY,
 }
 
 
@@ -42,6 +43,10 @@ class Settings(BaseSettings):
     ELEVENLABS_STT_MODEL: str = "scribe_v1"
     ELEVENLABS_TTS_MODEL: str = "eleven_flash_v2_5"
     ELEVENLABS_VOICE_ID: str = "JBFqnCBsd6RMkjVDRZzb"  # premade voice "George"
+    # Hội thoại realtime: mic stream thẳng tới Scribe Realtime (cần ELEVENLABS_API_KEY).
+    ELEVENLABS_REALTIME_MODEL: str = "scribe_v2_realtime"
+    # Khách im lặng bao lâu thì coi là nói xong một đoạn; chỉnh theo độ ồn thực tế ở sảnh.
+    VOICE_END_SILENCE_SECS: float = Field(default=0.5, ge=0.3, le=3.0)
 
     model_config = SettingsConfigDict(
         env_file=PROJECT_ROOT / ".env",

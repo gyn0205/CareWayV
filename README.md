@@ -198,6 +198,17 @@ Hai trạng thái `not_found` và `no_route` cung cấp câu phản hồi cho ng
 Khi chưa cấu hình key hoặc STT lỗi, dùng endpoint văn bản. Xem
 [nghiên cứu lựa chọn model và trạng thái hội thoại](docs/voice-wayfinding-research.md).
 
+**Trò chuyện realtime (cần `ELEVENLABS_API_KEY`).** Bấm mic một lần là kiosk nghe liên tục:
+trình duyệt stream mic thẳng tới Scribe Realtime bằng token dùng một lần, gửi câu đã nói xong
+qua `/text`, rồi phát giọng đọc dạng stream. Kiosk chuẩn bị câu trả lời ngay khi STT chốt câu
+nhưng chỉ cất lời khi mic đo thấy khách đã im 1,2 giây; khách nói tiếp thì kiosk bỏ câu trả lời,
+gộp câu và hỏi lại. Mic tự tắt sau 20 giây không ai nói. Không có key ElevenLabs thì kiosk tự
+lùi về chế độ bấm để nói từng câu (`/voice`).
+
+- `POST /api/v1/wayfinding/realtime?language=vi` trả `url` WebSocket kèm token (hết hạn sau 15 phút, dùng một lần).
+- `GET /api/v1/wayfinding/speech?text=…&language=vi&format=mp3|pcm` stream giọng đọc; `pcm` là PCM16 24 kHz.
+- `VOICE_END_SILENCE_SECS` (mặc định 0.5) là khoảng lặng để STT chốt một đoạn; tăng nếu sảnh ồn làm câu bị cắt vụn.
+
 Kiểm thử qua HTTP với PostgreSQL đã migrate và seed theo hướng dẫn trên.
 OpenRouter được mock trong tiến trình kiểm thử:
 

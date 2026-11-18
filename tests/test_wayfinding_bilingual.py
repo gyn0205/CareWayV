@@ -10,6 +10,7 @@ from threading import Thread
 from time import monotonic, sleep
 from unittest.mock import patch
 from urllib.error import HTTPError
+from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 import uvicorn
@@ -93,6 +94,9 @@ class BilingualWayfindingTest(unittest.TestCase):
             ("Chỉ đường đến Trung tâm Tim mạch", "3-01", "vi"),
             ("Where can I get an electrocardiogram?", "3-009", "en"),
             ("Tôi muốn đo điện tim", "3-009", "vi"),
+            # STT realtime viết liền mã phòng.
+            ("Phòng 4053 ở đâu vậy?", "4-053", "vi"),
+            ("Cho tôi đến nhà thuốc. À không, phòng 4053.", "4-053", "vi"),
         ):
             with self.subTest(utterance=utterance):
                 status, result = self.submit("text", text=utterance)
@@ -239,6 +243,78 @@ class BilingualWayfindingTest(unittest.TestCase):
         speech_request = json.loads(tts.data)
         self.assertEqual(speech_request["language_code"], "vi")
         self.assertIn("bốn, không năm ba", speech_request["text"])
+
+    def fetch(self, path, method="GET"):
+        request = Request(f"{self.base}/{path}", data=b"" if method == "POST" else None, method=method)
+        try:
+            with urlopen(request, timeout=10) as response:
+                return response.status, response.headers, response.read()
+        except HTTPError as error:
+            with error:
+                return error.code, error.headers, error.read()
+
+    def test_realtime_session_mints_a_single_use_token(self):
+        with patch.object(settings, "ELEVENLABS_API_KEY", SecretStr("mock-eleven")), \
+                patch("app.services.elevenlabs.urlopen") as eleven:
+            eleven.return_value = io.BytesIO(b'{"token": "sutkn_abc"}')
+            status, headers, body = self.fetch("realtime?language=en", "POST")
+        self.assertEqual(status, 200)
+        self.assertEqual(headers["Cache-Control"], settings.WAYFINDING_CACHE_CONTROL)
+        url = json.loads(body)["url"]
+        self.assertTrue(url.startswith("wss://api.elevenlabs.io/v1/speech-to-text/realtime?"))
+        for part in ("token=sutkn_abc", "language_code=en", "commit_strategy=vad", "audio_format=pcm_16000",
+                     f"vad_silence_threshold_secs={settings.VOICE_END_SILENCE_SECS}"):
+            self.assertIn(part, url)
+        [request] = [call.args[0] for call in eleven.call_args_list]
+        self.assertIn("/v1/single-use-token/realtime_scribe", request.full_url)
+        self.assertEqual(request.get_header("Xi-api-key"), "mock-eleven")
+        self.assertNotIn("mock-eleven", url)
+
+        # Không có key ElevenLabs → 503 để kiosk lùi về bấm để nói; token lỗi → 502.
+        status, _, body = self.fetch("realtime", "POST")
+        self.assertEqual(status, settings.WAYFINDING_ERROR_STATUS["voice_not_configured"])
+        with patch.object(settings, "ELEVENLABS_API_KEY", SecretStr("mock-eleven")), \
+                patch("app.services.elevenlabs.urlopen") as eleven:
+            eleven.side_effect = HTTPError("https://api.elevenlabs.io", 401, "Unauthorized", None, io.BytesIO())
+            status, _, body = self.fetch("realtime", "POST")
+        self.assertEqual(status, settings.WAYFINDING_ERROR_STATUS["transcription_failed"])
+        self.openrouter.assert_not_called()
+
+    def test_speech_streams_the_reply(self):
+        text = quote("Để đến phòng 4-053, đi thẳng.")
+        with patch.object(settings, "ELEVENLABS_API_KEY", SecretStr("mock-eleven")), \
+                patch("app.services.elevenlabs.urlopen") as eleven:
+            eleven.return_value = io.BytesIO(b"ID3" + bytes(40_000))
+            status, headers, body = self.fetch(f"speech?language=vi&text={text}")
+        self.assertEqual(status, 200)
+        self.assertEqual(headers["Content-Type"], "audio/mpeg")
+        self.assertEqual(body, b"ID3" + bytes(40_000))
+        [request] = [call.args[0] for call in eleven.call_args_list]
+        self.assertIn(f"/v1/text-to-speech/{settings.ELEVENLABS_VOICE_ID}/stream", request.full_url)
+        self.assertIn("bốn, không năm ba", json.loads(request.data)["text"])
+        self.assertIn("output_format=mp3_44100_128", request.full_url)
+
+        with patch.object(settings, "ELEVENLABS_API_KEY", SecretStr("mock-eleven")),                 patch("app.services.elevenlabs.urlopen") as eleven:
+            eleven.return_value = io.BytesIO(bytes(4_800))
+            status, headers, body = self.fetch(f"speech?language=vi&format=pcm&text={text}")
+        self.assertEqual((status, headers["Content-Type"], len(body)), (200, "audio/L16;rate=24000", 4_800))
+        self.assertIn("output_format=pcm_24000", eleven.call_args.args[0].full_url)
+
+        # Chỉ có OpenRouter: trả cả clip một lần.
+        self.openrouter.side_effect = [io.BytesIO(b"ID3-openrouter")]
+        status, _, body = self.fetch(f"speech?language=en&text={quote('Room 4-053')}")
+        self.assertEqual((status, body), (200, b"ID3-openrouter"))
+        status, _, _ = self.fetch(f"speech?format=pcm&text={text}")
+        self.assertEqual(status, settings.WAYFINDING_ERROR_STATUS["speech_failed"])
+
+        self.openrouter.side_effect = HTTPError("https://openrouter.ai", 503, "Unavailable", None, io.BytesIO())
+        status, _, _ = self.fetch(f"speech?text={text}")
+        self.assertEqual(status, settings.WAYFINDING_ERROR_STATUS["speech_failed"])
+        status, _, _ = self.fetch("speech?text=")
+        self.assertEqual(status, 422)
+        with patch.object(settings, "OPENROUTER_API_KEY", None):
+            status, _, _ = self.fetch(f"speech?text={text}")
+        self.assertEqual(status, settings.WAYFINDING_ERROR_STATUS["voice_not_configured"])
 
     def test_english_route_survives_unavailable_speech(self):
         self.openrouter.side_effect = [

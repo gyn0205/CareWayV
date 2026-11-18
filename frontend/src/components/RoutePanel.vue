@@ -92,7 +92,7 @@ onBeforeUnmount(() => {
       </button>
       <button v-if="canListen" type="button" class="ghost" @click="listen"><Volume2 :size="17" /> {{ labels.audioReply }}</button>
     </div>
-    <audio v-if="audioUrl" ref="player" :key="audioUrl" :src="audioUrl" controls class="audio-reply"
+    <audio v-if="audioUrl" ref="player" :key="audioUrl" :src="audioUrl" controls preload="none" class="audio-reply"
       :aria-label="labels.audioReply"></audio>
     <p v-else-if="result.speech_status === 'unavailable'" class="audio-note">{{ labels.audioUnavailable }}</p>
     <ol v-if="route.steps.length" ref="steps" class="steps">

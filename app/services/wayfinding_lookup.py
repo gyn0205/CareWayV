@@ -67,11 +67,14 @@ def code_forms(code: str) -> set[str]:
     groups = normalized.split()
     if not groups or not all(group.isascii() and group.isdigit() for group in groups):
         return {normalized}
-    return {
+    forms = {
         " ".join(parts)
         for english in (False, True)
         for parts in product(*(spoken_group(group, english) for group in groups))
     }
+    # STT realtime hay viết liền "4053" thay cho "4-053"; dữ liệu hiện không có hai mã nào trùng khi viết liền.
+    forms.add("".join(groups))
+    return forms
 
 
 def best_matches(query: str, phrases: dict[str, set[str]]) -> set[str]:

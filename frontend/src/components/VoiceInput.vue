@@ -4,8 +4,9 @@ import { Mic, Square } from '@lucide/vue'
 import { encodeRecording, MAX_AUDIO_BYTES, RECORDING_LIMIT_MS } from '../recording'
 
 // compact: nút mic nhỏ cạnh ô trả lời (khi kiosk hỏi lại); mặc định: nút mic lớn ở màn hình chờ.
-defineProps({ labels: { type: Object, required: true }, busy: Boolean, compact: Boolean })
-const emit = defineEmits(['submit', 'problem', 'activity'])
+// live: bấm mic là bắt đầu hội thoại realtime (App lo), không ghi âm từng câu ở đây.
+const props = defineProps({ labels: { type: Object, required: true }, busy: Boolean, compact: Boolean, live: Boolean })
+const emit = defineEmits(['submit', 'problem', 'activity', 'live'])
 const recording = ref(false)
 const preparing = ref(false)
 const active = computed(() => recording.value || preparing.value)
@@ -42,6 +43,10 @@ function cancel() {
 }
 
 async function record() {
+  if (props.live) {
+    emit('live')
+    return
+  }
   if (recording.value) {
     stop()
     return
