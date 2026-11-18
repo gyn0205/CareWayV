@@ -2,6 +2,7 @@
 
 from app.models.building import Building
 from app.models.department import Department
+from app.models.doctor import Doctor
 from app.models.floor import Floor
 from app.models.hospital_site import HospitalSite
 from app.models.kiosk import Kiosk
@@ -15,6 +16,7 @@ from app.models.service_location import ServiceLocation
 __all__ = [
     "Building",
     "Department",
+    "Doctor",
     "Floor",
     "HospitalSite",
     "Kiosk",

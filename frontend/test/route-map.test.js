@@ -125,7 +125,7 @@ test('route view enlarges a short route and keeps a long route within the map', 
 })
 
 test('zone labels wrap to two lines like the wall sign and never overflow', () => {
-  assert.equal(zoneCode('3-10-01'), '3-10')
+  assert.equal(zoneCode('3-167', [{ code: '3-167', zone: '3-10' }]), '3-10')
   assert.equal(zoneCode('4-06'), '4-06')
   assert.deepEqual(wrapLabel('Nhà thuốc', 20), ['Nhà thuốc'])
   assert.deepEqual(wrapLabel('Trung tâm Y học Tái tạo và Trị liệu Tế bào', 24), ['Trung tâm Y học Tái tạo', 'và Trị liệu Tế bào'])

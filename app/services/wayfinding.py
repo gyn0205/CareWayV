@@ -10,7 +10,9 @@ from app.crud import wayfinding as catalog
 from app.db.seeds.vinmec_floors_3_4.catalog import SITE_CODE
 from app.db.seeds.vinmec_floors_3_4.floor_plan import demo_floor_plan
 from app.models import Kiosk
-from app.schema.wayfinding import Clarification, DirectionResult, Language, Point, Route, Step, TextTurn, Turn
+from app.schema.wayfinding import (
+    Clarification, DirectionResult, FloorPlan, KioskMap, Language, MapFloor, Point, Route, Step, TextTurn, Turn,
+)
 from app.services.wayfinding_language import normalize, select_language
 from app.services.wayfinding_lookup import MAX_CANDIDATES, load_destinations, resolve
 
@@ -37,6 +39,36 @@ def kiosk_for(db: Session, code: str, language: Language) -> Kiosk:
         message = "No active kiosk found." if language == "en" else "Không tìm thấy kiosk đang hoạt động."
         raise WayfindingError("kiosk_not_found", message)
     return kiosks[0]
+
+
+def demo_floor_plans(db: Session, site_id: int, floors) -> list[FloorPlan]:
+    # Chỉ cơ sở mô phỏng mới có mặt bằng dựng sẵn; tầng đã có ảnh thì dùng ảnh.
+    site = catalog.active_site(db, site_id)
+    if not site or site.code != SITE_CODE:
+        return []
+    plans = (demo_floor_plan(floor.id, floor.level) for floor in floors if not floor.map_asset_url)
+    return [plan for plan in plans if plan]
+
+
+def kiosk_map(db: Session, code: str, language: Language) -> KioskMap:
+    """Bản đồ màn hình chờ: kiosk đứng ở đâu và mặt bằng các tầng (tầng cao trước như bảng thật)."""
+    kiosk = kiosk_for(db, code, language)
+    floors = sorted(catalog.site_floors(db, kiosk.site_id), key=lambda floor: -floor.level)
+    by_id = {floor.id: floor for floor in floors}
+    node = next(iter(catalog.floor_nodes(db, kiosk.site_id, by_id.keys(), [kiosk.origin_node_id])), None)
+    if node is None:
+        message = "The kiosk location is unavailable." if language == "en" else "Vị trí kiosk hiện không khả dụng."
+        raise WayfindingError("kiosk_conflict", message)
+    floor = by_id[node.floor_id]
+    return KioskMap(
+        kiosk_code=kiosk.code,
+        origin=Point(
+            floor_id=floor.id, floor=floor.level, x=node.x, y=node.y,
+            label=node.label, map_asset_url=floor.map_asset_url,
+        ),
+        floors=[MapFloor(floor_id=item.id, floor=item.level, map_asset_url=item.map_asset_url) for item in floors],
+        floor_plans=demo_floor_plans(db, kiosk.site_id, floors),
+    )
 
 
 # Phạt mỗi chặng thang bộ thật nặng: luôn ưu tiên thang máy khi đổi tầng,
@@ -219,14 +251,8 @@ def find_route(
     if steps:
         message += " " + " ".join(step.instruction for step in steps)
     origin, arrival = point(kiosk.origin_node_id), point(target_id)
-    site_record = catalog.active_site(db, site)
-    floor_plans = []
-    if site_record and site_record.code == SITE_CODE:
-        route_floors = dict.fromkeys([origin.floor_id, *(step.end.floor_id for step in steps)])
-        for floor_id in route_floors:
-            plan = demo_floor_plan(floor_id, floors[floor_id].level)
-            if plan and not floors[floor_id].map_asset_url:
-                floor_plans.append(plan)
+    route_floors = dict.fromkeys([origin.floor_id, *(step.end.floor_id for step in steps)])
+    floor_plans = demo_floor_plans(db, site, [floors[floor_id] for floor_id in route_floors])
     return DirectionResult(
         status="route", language=language,
         message=message,

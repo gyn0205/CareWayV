@@ -21,6 +21,16 @@ export async function requestDirections(mode, payload, signal) {
   return data
 }
 
+// Bản đồ màn hình chờ: vị trí kiosk + mặt bằng các tầng.
+export async function requestKioskMap(code, language, signal) {
+  const response = await fetch(`/gateway/kiosks/${encodeURIComponent(code)}?language=${language}`, { signal })
+  const data = await response.json().catch(() => null)
+  if (!response.ok || !data?.origin) {
+    throw new WayfindingRequestError(typeof data?.detail === 'string' ? data.detail : '', response.status)
+  }
+  return data
+}
+
 export function audioBase64(blob) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()

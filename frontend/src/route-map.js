@@ -2,8 +2,8 @@ export const hasCoordinates = (point) => Number.isFinite(point.x) && Number.isFi
 
 export const isTransfer = (step) => step.start.floor_id !== step.end.floor_id
 
-// Mã khu từ mã phòng: "3-10-01" → "3-10"; mã khu giữ nguyên.
-export const zoneCode = (code) => code.split('-').slice(0, 2).join('-')
+// Mã khu của một điểm đến: tra phòng trong `rooms` (phòng có trường zone); mã khu giữ nguyên.
+export const zoneCode = (code, rooms = []) => rooms.find((room) => room.code === code)?.zone ?? code
 
 // Chia tên khu thành tối đa 2 dòng, mỗi dòng không quá `limit` ký tự; quá dài thì thêm "…".
 export function wrapLabel(text, limit) {

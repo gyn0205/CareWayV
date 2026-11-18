@@ -36,7 +36,10 @@ def spoken_group(group: str, english: bool) -> set[str]:
     unpadded = group.lstrip("0") or "0"
     digits = EN_SMALL if english else DIGITS
     spelled = " ".join(digits[int(char)] for char in group)
-    forms = {group, unpadded, spelled}
+    forms = {group, spelled}
+    # Số phòng 3 chữ số ("010") không bỏ số 0 đầu, để "4-10" vẫn là khu 4-10 chứ không phải phòng 4-010.
+    if len(group) <= 2:
+        forms.add(unpadded)
     if english and "0" in group:
         forms.add(spelled.replace("zero", "oh"))
     if len(group) != 2:

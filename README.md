@@ -83,11 +83,11 @@ AI hỗ trợ giao tiếp bằng ngôn ngữ tự nhiên. Phòng đích do backe
 | Nút và cạnh đường đi | Lưu kết nối giữa các mốc, chiều đi, chuyển tầng, trạng thái mở và khả năng tiếp cận. |
 | Kiosk | Gắn mỗi màn hình với một nút xuất phát trong đúng cơ sở. |
 
-Các liên kết phòng, dịch vụ, kiosk và đồ thị được giới hạn bằng khóa ngoại theo cơ sở. Chi tiết 11 bảng, ERD và nguồn tham khảo nằm trong [thiết kế cơ sở dữ liệu](docs/wayfinding-database.md).
+Các liên kết phòng, dịch vụ, kiosk và đồ thị được giới hạn bằng khóa ngoại theo cơ sở. Chi tiết 12 bảng, ERD và nguồn tham khảo nằm trong [thiết kế cơ sở dữ liệu](docs/wayfinding-database.md).
 
 ## Trạng thái và hướng triển khai
 
-Repo có FastAPI, 11 bảng SQLAlchemy, PostgreSQL, migration Alembic và bộ dữ liệu chỉ đường mô phỏng tầng 3–4. Docker Compose chạy `frontend`, `api` và `db`. API áp dụng migration trước khi khởi động. Frontend Vue 3 gọi API để tra điểm đến, làm rõ khi có nhiều kết quả và hiển thị tuyến chỉ đường song ngữ.
+Repo có FastAPI, 12 bảng SQLAlchemy, PostgreSQL, migration Alembic và bộ dữ liệu chỉ đường mô phỏng tầng 3–4. Docker Compose chạy `frontend`, `api` và `db`. API áp dụng migration trước khi khởi động. Frontend Vue 3 gọi API để tra điểm đến, làm rõ khi có nhiều kết quả và hiển thị tuyến chỉ đường song ngữ.
 
 1. **Chuẩn bị dữ liệu cho một khu vực.** Dùng sơ đồ và danh mục phòng được xác thực. Gắn vị trí kiosk, cửa phòng và các mốc chuyển tầng vào đồ thị. Đánh dấu chiều đi, đoạn đang mở và khả năng tiếp cận.
 2. **Làm luồng chỉ đường bằng văn bản.** Nhập mã phòng hoặc tên dịch vụ, xử lý trường hợp nhiều điểm đến, sau đó trả tuyến và hiển thị sơ đồ tầng. Đây là luồng để kiểm tra dữ liệu và thuật toán trước khi tích hợp giọng nói.
@@ -108,7 +108,7 @@ docker compose ps
 
 Với database mới, [nạp dữ liệu chỉ đường mô phỏng](#nạp-dữ-liệu-chỉ-đường-mô-phỏng-tầng-3-và-4) trước khi thử tìm tuyến.
 
-Mở [frontend kiosk](http://127.0.0.1:5173) hoặc [Swagger UI](http://127.0.0.1:8000/docs). Có thể đặt `CAREWAYV_FRONTEND_PORT` trong `.env` để đổi cổng giao diện. Lệnh kiểm tra database, cấu hình `.env` và cách sinh revision mới nằm trong [hướng dẫn Docker Compose và Alembic](docs/database-migrations.md).
+Mở [trang giới thiệu](http://127.0.0.1:5173), [màn hình kiosk](http://127.0.0.1:5173/kiosk.html) hoặc [Swagger UI](http://127.0.0.1:8000/docs). Có thể đặt `CAREWAYV_FRONTEND_PORT` trong `.env` để đổi cổng giao diện. Lệnh kiểm tra database, cấu hình `.env` và cách sinh revision mới nằm trong [hướng dẫn Docker Compose và Alembic](docs/database-migrations.md).
 
 ### Phát triển frontend
 
@@ -121,7 +121,7 @@ npm ci
 npm run dev
 ```
 
-Nếu container frontend đang giữ cổng 5173, chạy Vite bằng `npm run dev -- --port 5174`. `npm run build` tạo bản production trong `frontend/dist/`. Trình duyệt cần quyền microphone và một secure context để thu âm. HTTPS hoặc localhost đáp ứng yêu cầu đó. Nhấn nút mic để nói, rồi nhấn lại để gửi sớm hoặc chờ tự gửi sau 15 giây. Tính năng giọng nói dùng `OPENROUTER_API_KEY` ở backend. [Nghiên cứu thiết kế frontend](docs/frontend-design-research.md)
+Nếu container frontend đang giữ cổng 5173, chạy Vite bằng `npm run dev -- --port 5174`. `npm run build` tạo bản production trong `frontend/dist/`. Trình duyệt cần quyền microphone và một secure context để thu âm. HTTPS hoặc localhost đáp ứng yêu cầu đó. Nhấn nút mic để nói, rồi nhấn **Dừng và gửi** hoặc chờ tự gửi sau 15 giây. Mỗi màn kiosk cài vị trí bằng `kiosk.html?kiosk=KIOSK-3-A` (mặc định `KIOSK-4`); `?q=…` mở sẵn một câu hỏi, `?demo=1` tự chạy demo cho trang giới thiệu. Kiosk tự quay về màn hình chính sau 60 giây không ai chạm. Tính năng giọng nói dùng `OPENROUTER_API_KEY` ở backend. [Nghiên cứu thiết kế frontend](docs/frontend-design-research.md)
 
 ## Nạp dữ liệu chỉ đường mô phỏng tầng 3 và 4
 
@@ -139,7 +139,7 @@ Mỗi tầng có hai bảng sơ đồ ở hai đầu giếng sảnh, mỗi bản
 
 Bộ dữ liệu có 20 phòng cho mỗi nhóm chuyên môn, 6 điểm phục vụ của nhà thuốc
 và 2 điểm tại mỗi quầy thanh toán, tổng cộng 450 phòng/điểm phục vụ trong 25 khu.
-Mã như `3-01-09` chỉ tầng 3, khu số 01, phòng số 09. Trong DB, dữ liệu thuộc
+Mã phòng đánh số liên tục theo tầng: `3-001`…`3-208`, `4-001`…`4-244` (vd. `3-009` là phòng số 9 tầng 3). Trong DB, dữ liệu thuộc
 cơ sở mô phỏng riêng `VINMEC-DEMO-F34`.
 
 ```bash
@@ -156,8 +156,9 @@ các bản ghi thuộc bộ dữ liệu mô phỏng.
 
 ## API chỉ đường
 
-Hai endpoint khai báo tại `app/api/wayfinding.py`. `app/api/__init__.py` tập hợp router để `app/main.py` gắn vào FastAPI. `app/core/config.py` đọc tiền tố, tag Swagger, Cache-Control và mã lỗi từ `.env`. Xem các biến trong `.env.example`. `WAYFINDING_ERROR_STATUS` nhận một object JSON và cho phép ghi đè từng mã. Sau khi đổi cấu hình, chạy `docker compose up -d --wait api frontend` để áp dụng cho cả API và proxy. [Swagger UI](http://127.0.0.1:8000/docs)
+Ba endpoint khai báo tại `app/api/wayfinding.py`. `app/api/__init__.py` tập hợp router để `app/main.py` gắn vào FastAPI. `app/core/config.py` đọc tiền tố, tag Swagger, Cache-Control và mã lỗi từ `.env`. Xem các biến trong `.env.example`. `WAYFINDING_ERROR_STATUS` nhận một object JSON và cho phép ghi đè từng mã. Sau khi đổi cấu hình, chạy `docker compose up -d --wait api frontend` để áp dụng cho cả API và proxy. [Swagger UI](http://127.0.0.1:8000/docs)
 
+- `GET /api/v1/wayfinding/kiosks/{kiosk_code}` trả vị trí kiosk và mặt bằng mọi tầng, để màn hình chờ hiện bản đồ trước khi khách hỏi.
 - `POST /api/v1/wayfinding/text` nhận `kiosk_code`, `text` và tùy chọn `wheelchair`.
 - `POST /api/v1/wayfinding/voice` nhận `kiosk_code`, `audio_base64` và `format`.
 
@@ -180,7 +181,7 @@ phòng vẫn dùng dữ liệu tiếng Việt, còn từng bước chỉ đườ
 ```bash
 curl -fsS http://127.0.0.1:8000/api/v1/wayfinding/text \
   -H 'Content-Type: application/json' \
-  -d '{"kiosk_code":"KIOSK-3","text":"Chỉ đường tới phòng 4-04-11","wheelchair":true}'
+  -d '{"kiosk_code":"KIOSK-3","text":"Chỉ đường tới phòng 4-053","wheelchair":true}'
 ```
 
 Kết quả `route` gồm điểm xuất phát, cửa đến, thời gian ước tính và từng đoạn

@@ -1,13 +1,269 @@
 <!doctype html>
 <html lang="vi">
-  <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#073d58">
-    <title>CareWayV | Hospital Wayfinding</title>
-  </head>
-  <body>
-    <div id="app"></div>
-    <script type="module" src="/src/main.js"></script>
-  </body>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CareWayV</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* Bảng màu dùng chung với kiosk */
+:root {
+  --navy: #0c3653; --blue: #076d92; --blue-dark: #075470; --muted: #526b7d; --line: #dce7ed;
+  --pale: #eaf5fa; --gold: #b9862c; --bg: #f6f9fb; --card: #fff; --route: #1f5fd6; --target: #d64534;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; font-family: "Be Vietnam Pro", system-ui, sans-serif; color: var(--navy); background: var(--bg); line-height: 1.55; overflow-x: hidden; }
+a { color: inherit; }
+svg.i { width: 1em; height: 1em; flex: none; }
+.wrap { max-width: 1240px; margin: 0 auto; padding: 0 32px; }
+
+/* ---------- Thanh điều hướng ---------- */
+nav { position: sticky; top: 0; z-index: 10; background: rgba(246,249,251,.86); backdrop-filter: blur(10px); border-bottom: 1px solid transparent; transition: border-color .2s; }
+nav.scrolled { border-color: var(--line); }
+.nav-in { display: flex; align-items: center; gap: 28px; height: 68px; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 21px; text-decoration: none; letter-spacing: -.02em; }
+.brand-mark { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; background: var(--navy); color: #fff; font-size: 20px; }
+.brand .word span { color: var(--gold); }
+.links { display: flex; gap: 26px; margin-left: auto; font-size: 15px; font-weight: 500; }
+.links a { text-decoration: none; color: var(--muted); }
+.links a:hover { color: var(--navy); }
+.btn { display: inline-flex; align-items: center; gap: 9px; padding: 13px 20px; border-radius: 12px; font-weight: 700; font-size: 15px; text-decoration: none; border: 1px solid transparent; transition: transform .15s, background .15s; }
+.btn:hover { transform: translateY(-1px); }
+.btn-dark { background: var(--navy); color: #fff; }
+.btn-dark:hover { background: var(--blue-dark); }
+.btn-line { border-color: var(--line); background: var(--card); }
+.btn-sm { padding: 9px 15px; font-size: 14px; border-radius: 10px; }
+
+/* ---------- Màn đầu: tiêu đề trái, kiosk demo phải, số liệu dưới ---------- */
+.hero { min-height: calc(100vh - 68px); display: flex; flex-direction: column; justify-content: center; padding: 28px 0 32px; position: relative; }
+.hero::before { /* lưới mờ gợi bản vẽ mặt bằng */
+  content: ""; position: absolute; inset: 0; z-index: -1; opacity: .55;
+  background-image: linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px);
+  background-size: 44px 44px; mask-image: radial-gradient(ellipse at 70% 40%, #000 20%, transparent 72%);
+}
+.hero-grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 48px; align-items: center; }
+.eyebrow { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); font-size: 13px; font-weight: 600; color: var(--muted); }
+.eyebrow b { width: 8px; height: 8px; border-radius: 50%; background: #2e9658; }
+h1 { font-size: clamp(36px, 3.8vw, 52px); line-height: 1.06; letter-spacing: -.035em; margin: 18px 0 18px; font-weight: 800; }
+h1 em { font-style: normal; color: var(--blue); }
+.lede { font-size: 18px; color: var(--muted); margin: 0 0 28px; max-width: 34em; }
+.cta { display: flex; gap: 12px; flex-wrap: wrap; }
+.device { position: relative; }
+.screen { border-radius: 18px; padding: 10px; background: #0f2233; box-shadow: 0 40px 80px -30px rgba(12,54,83,.55), 0 0 0 1px rgba(255,255,255,.06) inset; }
+.viewport { position: relative; aspect-ratio: 16 / 10; overflow: hidden; border-radius: 10px; background: #fff; }
+.viewport iframe { position: absolute; top: 0; left: 0; width: 1440px; height: 900px; border: 0; transform-origin: 0 0; pointer-events: none; }
+.viewport a { position: absolute; inset: 0; display: grid; place-items: center; text-decoration: none; opacity: 0; transition: opacity .2s; background: rgba(12,54,83,.35); }
+.viewport a span { background: #fff; padding: 12px 18px; border-radius: 12px; font-weight: 700; }
+.viewport:hover a { opacity: 1; }
+.stand { width: 22%; height: 26px; margin: 0 auto; background: linear-gradient(#0f2233, #284155); clip-path: polygon(18% 0, 82% 0, 100% 100%, 0 100%); }
+.caption { text-align: center; font-size: 13px; color: var(--muted); margin-top: 10px; }
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; margin-top: 40px; background: var(--line); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+.stat { background: var(--card); padding: 18px 22px; }
+.stat b { display: block; font-size: 30px; letter-spacing: -.03em; line-height: 1.1; }
+.stat p { margin: 4px 0 6px; font-size: 14.5px; color: var(--muted); }
+.tag { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .04em; padding: 2px 8px; border-radius: 6px; background: var(--pale); color: var(--blue-dark); }
+.tag.rule { background: #fbf2e1; color: #85621f; }
+
+/* ---------- Các phần cuộn xuống ---------- */
+section.block { padding: 96px 0; }
+section.alt { background: var(--card); border-block: 1px solid var(--line); }
+.kicker { font-size: 13px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--gold); }
+h2 { font-size: clamp(28px, 3vw, 40px); letter-spacing: -.03em; line-height: 1.15; margin: 10px 0 14px; }
+.intro { color: var(--muted); font-size: 17px; max-width: 46em; margin: 0 0 40px; }
+.cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 26px; }
+section.alt .card { background: var(--bg); }
+.card h3 { margin: 14px 0 8px; font-size: 19px; letter-spacing: -.01em; }
+.card p { margin: 0; color: var(--muted); font-size: 15.5px; }
+.ic { width: 46px; height: 46px; border-radius: 13px; display: grid; place-items: center; background: var(--pale); color: var(--blue); font-size: 22px; }
+.quote { margin-top: 28px; padding: 22px 26px; border-left: 4px solid var(--gold); background: #fbf6ec; border-radius: 0 14px 14px 0; font-size: 17px; }
+.quote small { display: block; margin-top: 6px; color: var(--muted); font-size: 13px; }
+.flow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; counter-reset: f; }
+.flow .card { position: relative; }
+.flow .card::before { counter-increment: f; content: "0" counter(f); font-size: 14px; font-weight: 800; color: var(--blue); letter-spacing: .06em; }
+.flow .example { margin-top: 16px; padding: 12px 14px; border-radius: 12px; background: var(--pale); font-size: 14px; color: var(--navy); }
+.split { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.list { list-style: none; padding: 0; margin: 14px 0 0; display: grid; gap: 12px; }
+.list li { display: flex; gap: 12px; font-size: 15.5px; }
+.list li::before { content: "✓"; flex: none; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 800; background: #e3f3e8; color: #22703f; }
+.list.no li::before { content: "✕"; background: #fbe6e2; color: var(--target); }
+.try { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.try a { display: block; text-decoration: none; background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 22px; transition: border-color .15s, transform .15s; }
+.try a:hover { border-color: var(--blue); transform: translateY(-2px); }
+.try q { display: block; font-size: 20px; font-weight: 700; quotes: "“" "”"; }
+.try p { margin: 8px 0 0; font-size: 14.5px; color: var(--muted); }
+.try span { display: inline-flex; gap: 6px; align-items: center; margin-top: 14px; font-weight: 700; font-size: 14px; color: var(--blue); }
+.road { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; position: relative; }
+.road::before { content: ""; position: absolute; top: 15px; left: 15px; right: 15px; height: 2px; background: var(--line); }
+.road div { position: relative; padding-right: 22px; }
+.road i { display: block; width: 32px; height: 32px; border-radius: 50%; background: var(--card); border: 2px solid var(--line); margin-bottom: 16px; position: relative; }
+.road .now i { background: var(--blue); border-color: var(--blue); box-shadow: 0 0 0 6px var(--pale); }
+.road b { display: block; font-size: 17px; }
+.road small { display: block; font-size: 12px; font-weight: 700; letter-spacing: .06em; color: var(--gold); text-transform: uppercase; margin-bottom: 4px; }
+.road p { margin: 6px 0 0; font-size: 14.5px; color: var(--muted); }
+.measure { margin-top: 44px; display: flex; gap: 18px; align-items: center; padding: 22px 26px; border-radius: 16px; background: var(--navy); color: #fff; }
+.measure b { font-size: 17px; }
+.measure p { margin: 2px 0 0; color: #bcd3e2; font-size: 15px; }
+footer { padding: 32px 0 44px; color: var(--muted); font-size: 14px; }
+footer .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+
+/* Màn hình thấp: thu gọn để màn đầu vẫn trọn vẹn */
+@media (max-height: 800px) and (min-width: 981px) {
+  h1 { font-size: 44px; margin: 14px 0 14px; } .lede { font-size: 16.5px; margin-bottom: 22px; }
+  .stats { margin-top: 18px; } .stat { padding: 10px 20px; } .stat b { font-size: 24px; } .stat p { font-size: 13.5px; margin: 2px 0 4px; }
+  .hero { padding: 12px 0 14px; } .caption { margin-top: 4px; } .stand { height: 18px; }
+  .eyebrow { display: none; }
+}
+@media (max-width: 980px) {
+  .hero { min-height: 0; padding-top: 36px; }
+  .hero-grid { grid-template-columns: 1fr; gap: 36px; }
+  .links { display: none; }
+  .nav-in .btn { margin-left: auto; }
+  .cards, .flow, .try, .split { grid-template-columns: 1fr; }
+  .road { grid-template-columns: 1fr 1fr; row-gap: 28px; } .road::before { display: none; }
+}
+@media (max-width: 640px) {
+  .wrap { padding: 0 16px; }
+  .stats { grid-template-columns: 1fr; }
+  .road { grid-template-columns: 1fr; }
+  section.block { padding: 64px 0; }
+  .measure { flex-direction: column; align-items: flex-start; }
+}
+</style>
+</head>
+<body>
+<nav id="nav">
+  <div class="wrap nav-in">
+    <a class="brand" href="#top"><span class="brand-mark"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m16.2 7.8-2.1 6.3-6.3 2.1 2.1-6.3z"/></svg></span><span class="word">CareWay<span>V</span></span></a>
+    <div class="links"><a href="#van-de">Vấn đề</a><a href="#cach-hoat-dong">Cách hoạt động</a><a href="#ai">Vai trò AI</a><a href="#thu">Thử demo</a><a href="#lo-trinh">Lộ trình</a></div>
+    <a class="btn btn-dark btn-sm" href="kiosk.html">Mở kiosk <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+  </div>
+</nav>
+
+<!-- ===== Màn đầu: hiểu dự án trong 5 giây, thấy sản phẩm chạy ngay ===== -->
+<header class="hero" id="top">
+  <div class="wrap">
+    <div class="hero-grid">
+      <div>
+        <span class="eyebrow"><b></b>Kiosk chỉ đường trong bệnh viện · Nguyên mẫu</span>
+        <h1>Hỏi đường trong bệnh viện: <em>nói một câu, thấy ngay lối đi.</em></h1>
+        <p class="lede">CareWayV biến màn hình sơ đồ tầng cạnh thang máy thành kiosk biết nghe. Khách nói mã phòng hay tên dịch vụ trên phiếu, kiosk tìm đúng phòng và vẽ đường tới tận cửa, để quầy tư vấn dành thời gian cho việc tư vấn.</p>
+        <div class="cta">
+          <a class="btn btn-dark" href="kiosk.html">Thử kiosk <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+          <a class="btn btn-line" href="#cach-hoat-dong">Xem cách hoạt động</a>
+        </div>
+      </div>
+      <div class="device">
+        <div class="screen"><div class="viewport" id="vp">
+          <iframe src="kiosk.html?demo=1" title="Demo kiosk CareWayV" tabindex="-1" loading="eager"></iframe>
+          <a href="kiosk.html" aria-label="Mở kiosk để tự thử"><span>Tự thử kiosk →</span></a>
+        </div></div>
+        <div class="stand"></div>
+        <p class="caption">Demo tự chạy: “Siêu âm vú” → kiosk hỏi lại → tuyến đổi tầng tới Trung tâm Vú</p>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="stat"><b>15–28</b><p>lượt hỏi đường mỗi giờ tại quầy tư vấn tầng 4, giờ cao điểm buổi sáng</p><span class="tag">ĐO TẠI QUẦY · 11–12/11</span></div>
+      <div class="stat"><b>~2/3</b><p>số khách hỏi đường hỏi người ngay, không nhìn bảng sơ đồ</p><span class="tag">ĐO TẠI QUẦY · 12/11</span></div>
+      <div class="stat"><b>0</b><p>câu chỉ đường do AI tự nghĩ: tuyến luôn lấy từ sơ đồ đã xác thực</p><span class="tag rule">NGUYÊN TẮC THIẾT KẾ</span></div>
+    </div>
+  </div>
+</header>
+
+<!-- ===== Vấn đề ===== -->
+<section class="block alt" id="van-de">
+  <div class="wrap">
+    <span class="kicker">Vấn đề</span>
+    <h2>Bảng sơ đồ có sẵn, nhưng khách vẫn đi hỏi</h2>
+    <p class="intro">Quan sát hai buổi sáng tại quầy tư vấn tầng 4: phần lớn lượt khách tới quầy là hỏi đường, dù bảng sơ đồ tầng đặt ngay cửa thang máy.</p>
+    <div class="cards">
+      <div class="card"><div class="ic">👥</div><h3>Khách hỏi người trước</h3><p>Khoảng 2/3 người hỏi đường đi thẳng tới quầy, không nhìn bảng, nhất là khi đi theo nhóm đông.</p></div>
+      <div class="card"><div class="ic">🗺️</div><h3>Bảng chỉ có tên khu</h3><p>Khách cầm phiếu ghi “phòng 4-0xx”, “lấy mẫu nước tiểu”, “siêu âm”. Bảng chỉ có 13 khu của tầng này, không có phòng, dịch vụ hay tầng khác.</p></div>
+      <div class="card"><div class="ic">📞</div><h3>Quầy tư vấn bị cắt ngang</h3><p>Chuyên viên đang gọi điện tư vấn phải dừng để chỉ đường. Có câu các chị không trả lời ngay được, có khách đi luôn phải chạy theo.</p></div>
+    </div>
+    <div class="quote">“Phòng siêu âm ở đâu?”, “Phòng 4-00x ở đâu?”, “Phòng lấy mẫu nước tiểu ở đâu?” là những câu hỏi lặp lại mỗi sáng.<small>Ghi chép quan sát tại quầy, 14/11</small></div>
+  </div>
+</section>
+
+<!-- ===== Cách hoạt động ===== -->
+<section class="block" id="cach-hoat-dong">
+  <div class="wrap">
+    <span class="kicker">Cách hoạt động</span>
+    <h2>Ba bước, ngay trên màn hình sơ đồ</h2>
+    <p class="intro">Bản đồ luôn hiện như bảng sơ đồ cũ. Khách hỏi bằng lời hoặc gõ, tuyến được vẽ ngay trên bản đồ đó.</p>
+    <div class="flow">
+      <div class="card"><h3>Nói hoặc nhập</h3><p>Tiếng Việt hoặc tiếng Anh. Khách đọc nguyên văn mã phòng hay tên dịch vụ trên phiếu, không cần biết tên khoa.</p><div class="example">🎤 “Tôi đi chụp cộng hưởng từ gan”</div></div>
+      <div class="card"><h3>Xác định đúng phòng</h3><p>Tra danh mục phòng và dịch vụ. Nếu nhiều nơi khớp, kiosk hỏi lại một câu ngắn thay vì đoán.</p><div class="example">💬 “Có 9 khu có siêu âm. Phiếu ghi siêu âm gì?”</div></div>
+      <div class="card"><h3>Vẽ đường tới cửa</h3><p>Tuyến tính trên đồ thị lối đi đã khảo sát: qua thang máy, đổi tầng, ưu tiên xe lăn, kèm chỉ dẫn từng bước và đọc to.</p><div class="example">🧭 Tầng 4 → Tầng 3 · 2 phút · ~100 m</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== AI làm gì / không làm gì ===== -->
+<section class="block alt" id="ai">
+  <div class="wrap">
+    <span class="kicker">Vai trò AI</span>
+    <h2>AI giúp hiểu câu hỏi, không tự chỉ đường</h2>
+    <p class="intro">Trong bệnh viện, chỉ sai một lần là mất niềm tin. Vì vậy AI chỉ lo phần ngôn ngữ, còn điểm đến và tuyến đường do dữ liệu quyết định.</p>
+    <div class="split">
+      <div class="card"><h3>AI làm</h3><ul class="list">
+        <li>Chuyển lời nói thành chữ, nhận ra mã phòng và tên dịch vụ</li>
+        <li>Hiểu cách gọi khác nhau: “MRI” = “cộng hưởng từ”</li>
+        <li>Đặt câu hỏi làm rõ khi có nhiều phòng phù hợp</li>
+        <li>Đọc chỉ dẫn thành lời dễ nghe, Việt hoặc Anh</li>
+      </ul></div>
+      <div class="card"><h3>AI không làm</h3><ul class="list no">
+        <li>Tự mô tả đường đi: tuyến do thuật toán tính trên sơ đồ</li>
+        <li>Đoán chuyên khoa từ triệu chứng</li>
+        <li>Tư vấn y tế hay giá dịch vụ: chuyển khách tới quầy</li>
+        <li>Dùng camera hay nhận diện khuôn mặt</li>
+      </ul></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== Thử demo ===== -->
+<section class="block" id="thu">
+  <div class="wrap">
+    <span class="kicker">Thử demo</span>
+    <h2>Ba tình huống gặp ở quầy</h2>
+    <p class="intro">Bấm để mở kiosk với câu hỏi có sẵn. Dữ liệu phòng và tuyến là mô phỏng trên mặt bằng tầng 3–4.</p>
+    <div class="try">
+      <a href="kiosk.html?q=Phòng 4-053 ở đâu?"><q>Phòng 4-053 ở đâu?</q><p>Có mã phòng trên phiếu: tra thẳng, chỉ đường cùng tầng.</p><span>Mở kiosk →</span></a>
+      <a href="kiosk.html?q=Siêu âm vú"><q>Siêu âm vú</q><p>Tên dịch vụ có ở nhiều phòng: kiosk hỏi lại rồi mới chỉ đường.</p><span>Mở kiosk →</span></a>
+      <a href="kiosk.html?q=Trung tâm Vú ở đâu?"><q>Trung tâm Vú ở đâu?</q><p>Khoa ở tầng khác: chỉ ra thang máy, tự chuyển bản đồ sang tầng 3.</p><span>Mở kiosk →</span></a>
+    </div>
+  </div>
+</section>
+
+<!-- ===== Lộ trình ===== -->
+<section class="block alt" id="lo-trinh">
+  <div class="wrap">
+    <span class="kicker">Lộ trình</span>
+    <h2>Làm nhỏ, đo được, rồi mới mở rộng</h2>
+    <p class="intro">Tận dụng màn hình sơ đồ có sẵn thay vì robot: rẻ, lắp nhanh, mỗi màn chỉ cài vị trí một lần.</p>
+    <div class="road">
+      <div class="now"><i></i><small>Hiện tại</small><b>Bản đồ + tìm bằng chữ</b><p>Tầng 3–4 mô phỏng, hỏi lại khi nhiều kết quả, tuyến đổi tầng.</p></div>
+      <div><i></i><small>Tiếp theo</small><b>Giọng nói Việt/Anh</b><p>Nhận dạng lời nói, đọc chỉ dẫn, thử với tiếng ồn ở sảnh.</p></div>
+      <div><i></i><small>Sau đó</small><b>Cảm biến chào khách</b><p>Khách đứng ~10 giây thì kiosk chủ động chào. Chỉ phát hiện có người, không dùng camera.</p></div>
+      <div><i></i><small>Khi có dữ liệu</small><b>QR lịch hẹn</b><p>Quét mã trên tin nhắn hẹn để biết phòng được phân công.</p></div>
+    </div>
+    <div class="measure"><div style="font-size:30px">📊</div><div><b>Đo hiệu quả bằng số lượt hỏi đường mỗi giờ tại quầy</b><p>So với mốc 15–28 lượt/giờ, bật và tắt kiosk xen kẽ theo ngày để so sánh công bằng.</p></div></div>
+  </div>
+</section>
+
+<footer><div class="wrap"><span>CareWayV · Nguyên mẫu bố cục</span><span>Dữ liệu mô phỏng · Tầng 3–4 · Chưa khảo sát thực địa</span></div></footer>
+
+<script>
+// Thu nhỏ kiosk 1440×900 cho vừa khung màn hình demo
+const vp = document.getElementById('vp'), frame = vp.querySelector('iframe');
+const fit = () => { frame.style.transform = `scale(${vp.clientWidth / 1440})`; };
+new ResizeObserver(fit).observe(vp); fit();
+// Viền dưới thanh điều hướng khi cuộn
+const nav = document.getElementById('nav');
+addEventListener('scroll', () => nav.classList.toggle('scrolled', scrollY > 8), { passive: true });
+</script>
+</body>
 </html>

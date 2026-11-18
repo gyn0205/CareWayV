@@ -38,7 +38,7 @@ def demo_floor_plan(floor_id: int, level: int) -> FloorPlan | None:
         for slot in room_slots(zone):
             left, top, room_width, room_height = slot.rect
             rooms.append(MapRoom(
-                code=slot.code, x=left, y=top, width=room_width, height=room_height,
+                code=slot.code, zone=zone.code, x=left, y=top, width=room_width, height=room_height,
                 door_side="south" if slot.bank < 0 else "north",
             ))
     return FloorPlan(

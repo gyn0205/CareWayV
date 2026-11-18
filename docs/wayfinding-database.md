@@ -19,6 +19,7 @@ erDiagram
     SERVICES ||--o{ SERVICE_ALIASES : "có cách gọi"
     SERVICES ||--o{ SERVICE_LOCATIONS : "thực hiện tại"
     ROOMS ||--o{ SERVICE_LOCATIONS : "phục vụ"
+    ROOMS ||--o{ DOCTORS : "có bác sĩ khám"
 ```
 
 | Bảng | Vai trò |
@@ -30,6 +31,7 @@ erDiagram
 | `services`, `service_aliases` | Danh mục dịch vụ và cách gọi như “MRI” hoặc “cộng hưởng từ”. Khi nhập danh mục, lớp ứng dụng sẽ điền `normalized_name` và `normalized_alias` theo cùng quy tắc chuẩn hóa. Một bí danh có thể khớp nhiều dịch vụ. |
 | `service_locations` | Liên kết nhiều–nhiều giữa dịch vụ và phòng có cung cấp dịch vụ đó. Có thể đánh dấu từng liên kết đang hoạt động. |
 | `kiosks` | Mỗi kiosk gắn với một nút trên đồ thị làm điểm xuất phát. |
+| `doctors` | Bác sĩ khám tại một phòng, kèm học hàm (`title`) và `normalized_name` để tra theo tên. Tên có thể trùng nên định danh bằng `code` (vd. `BS-3-001`). Dữ liệu mô phỏng có 80 bác sĩ mỗi tầng, cố ý có nhiều người trùng họ tên. |
 
 Các khóa ngoại ghép theo `site_id` giữ tòa nhà, tầng, nút, phòng, kiosk và dịch vụ trong đúng cơ sở khi tạo liên kết. PostgreSQL hỗ trợ loại ràng buộc này khi tổ hợp cột được tham chiếu có khóa chính hoặc ràng buộc duy nhất. [PostgreSQL — Foreign Keys](https://www.postgresql.org/docs/17/ddl-constraints.html#DDL-CONSTRAINTS-FK)
 
@@ -40,4 +42,4 @@ Các khóa ngoại ghép theo `site_id` giữ tòa nhà, tầng, nút, phòng, k
 - **Voice AI và trường hợp nhiều điểm đến.** Ứng dụng giọng nói có thể trích mã phòng, tên dịch vụ hoặc tầng được nhắc trong câu hỏi, sau đó đối chiếu với danh mục. Nếu câu “Tôi đi chụp MRI” trả về nhiều phòng, kiosk có thể hỏi thêm mã phòng hoặc đề nghị người dùng xác nhận. Dữ liệu dịch vụ và sơ đồ là nguồn xác định điểm đến và tuyến đường.
 - **Lịch hẹn sau MVP.** Nếu bệnh viện cung cấp giao diện tra cứu, QR có thể mang mã tham chiếu ngắn hạn để hệ thống lấy địa điểm được phân công rồi ánh xạ sang phòng CareWayV. FHIR R4 hỗ trợ `Location` trong danh sách thành phần tham gia lịch hẹn. [HL7 FHIR R4 — Appointment](https://www.hl7.org/fhir/R4/appointment-definitions.html#Appointment.participant.actor)
 
-Migration `0001` tạo schema chỉ đường. Revision `0002` thêm các cột audit và soft delete cho cả 11 bảng. Xem [hướng dẫn chạy migration](database-migrations.md).
+Migration `0001` tạo schema chỉ đường. Revision `0002` thêm các cột audit và soft delete cho cả 11 bảng. Revision `0005` thêm bảng `doctors`. Xem [hướng dẫn chạy migration](database-migrations.md).

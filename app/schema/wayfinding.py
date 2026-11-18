@@ -80,6 +80,7 @@ class MapZone(MapArea):
 
 class MapRoom(MapArea):
     door_side: Literal["north", "south"]
+    zone: str | None = None  # mã khu chứa phòng (mã phòng không còn chứa mã khu)
 
 
 class MapLandmark(BaseModel):
@@ -123,6 +124,21 @@ class Route(BaseModel):
     arrival: Point
     seconds: int
     steps: list[Step]
+    floor_plans: list[FloorPlan] = Field(default_factory=list)
+
+
+class MapFloor(BaseModel):
+    floor_id: int
+    floor: int
+    map_asset_url: str | None
+
+
+class KioskMap(BaseModel):
+    """Bản đồ cho màn hình chờ: vị trí kiosk và mặt bằng mọi tầng, chưa cần tuyến."""
+
+    kiosk_code: str
+    origin: Point
+    floors: list[MapFloor]
     floor_plans: list[FloorPlan] = Field(default_factory=list)
 
 

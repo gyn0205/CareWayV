@@ -8,6 +8,7 @@ from app.db.session import SessionLocal
 from app.models import (
     Building,
     Department,
+    Doctor,
     Floor,
     HospitalSite,
     Kiosk,
@@ -20,6 +21,7 @@ from app.models import (
 )
 
 from .catalog import ENGLISH_ZONE_NAMES, SITE_CODE, ZONES
+from .doctors import doctor_slots
 from .layout import FLOORS, HEIGHT, WIDTH, build_layout, room_slots
 
 
@@ -167,21 +169,38 @@ def seed(session) -> dict[str, int]:
             "quầy tư vấn", "tư vấn dịch vụ", "đặt lịch khám", "service advice desk", "book an appointment",
         ),
     }
-    sync(
+    alias_rows = sync(
         session, ServiceAlias, scope, ("service_id", "normalized_alias"), [
             {"service_id": service_ids[name], "normalized_alias": normalize(alias), "alias": alias}
             for name, values in aliases.items() for alias in values
         ],
     )
-    sync(
+    locations = sync(
         session, ServiceLocation, scope, ("service_id", "room_id"), [
             {"service_id": service_ids[name], "room_id": rooms[code,].id, "is_active": True}
             for code, name in service_by_room.items()
         ],
     )
+    # Bác sĩ mô phỏng: mỗi người gắn với một phòng khám, tên có thể trùng.
+    doctors = sync(
+        session, Doctor, scope, ("code",), [
+            {
+                "code": doctor.code, "title": doctor.title, "name": doctor.name,
+                "normalized_name": normalize(doctor.name),
+                "room_id": rooms[doctor.room_code,].id, "is_active": True,
+            }
+            for doctor in doctor_slots()
+        ],
+    )
+    # Ẩn phòng/dịch vụ mang mã cũ (vd. "4-04-11") sau khi đổi sang mã theo tầng.
+    for model, keep in (
+        (Doctor, doctors), (ServiceLocation, locations), (ServiceAlias, alias_rows), (Service, services), (Room, rooms),
+    ):
+        retire(session, model, scope, keep)
     return {
         "floors": len(floors), "departments": len(departments), "rooms": len(rooms),
         "services": len(services), "nodes": len(nodes), "edges": len(edges), "kiosks": len(kiosks),
+        "doctors": len(doctors),
     }
 
 

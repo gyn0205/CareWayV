@@ -91,8 +91,8 @@ class BilingualWayfindingTest(unittest.TestCase):
         for utterance, code, language in (
             ("Where is the Cardiovascular Center?", "3-01", "en"),
             ("Chỉ đường đến Trung tâm Tim mạch", "3-01", "vi"),
-            ("Where can I get an electrocardiogram?", "3-01-09", "en"),
-            ("Tôi muốn đo điện tim", "3-01-09", "vi"),
+            ("Where can I get an electrocardiogram?", "3-009", "en"),
+            ("Tôi muốn đo điện tim", "3-009", "vi"),
         ):
             with self.subTest(utterance=utterance):
                 status, result = self.submit("text", text=utterance)
@@ -100,10 +100,26 @@ class BilingualWayfindingTest(unittest.TestCase):
                 self.assert_route(result, code, language)
         self.openrouter.assert_not_called()
 
+    def test_kiosk_map_shows_every_floor_before_any_question(self):
+        # Màn hình chờ: kiosk đứng đúng tầng và có mặt bằng cả hai tầng, tầng cao trước.
+        with urlopen(f"{self.base}/kiosks/KIOSK-4", timeout=10) as response:
+            result = json.load(response)
+        self.assertEqual(result["origin"]["floor"], 4)
+        self.assertEqual([floor["floor"] for floor in result["floors"]], [4, 3])
+        self.assertEqual(
+            {plan["floor_id"] for plan in result["floor_plans"]},
+            {floor["floor_id"] for floor in result["floors"]},
+        )
+        with self.assertRaises(HTTPError) as missing:
+            urlopen(f"{self.base}/kiosks/NO-KIOSK?language=en", timeout=10)
+        with missing.exception as error:
+            self.assertEqual(error.code, 404)
+            self.assertEqual(json.load(error)["detail"], "No active kiosk found.")
+
     def test_all_four_kiosks_start_at_their_own_map_board(self):
         origins = {}
         kiosks = (("KIOSK-3-A", 3), ("KIOSK-3", 3), ("KIOSK-4-A", 4), ("KIOSK-4", 4))
-        for (code, floor), room in ((kiosk, room) for kiosk in kiosks for room in ("3-10-01", "4-04-11")):
+        for (code, floor), room in ((kiosk, room) for kiosk in kiosks for room in ("3-167", "4-053")):
             with self.subTest(kiosk=code, room=room):
                 status, result = self.submit("text", kiosk_code=code, text=room)
                 self.assertEqual(status, 200)
@@ -129,10 +145,10 @@ class BilingualWayfindingTest(unittest.TestCase):
 
     def test_cashier_route_fits_the_floor_plans_on_both_sides_of_the_elevator(self):
         status, result = self.submit(
-            "text", kiosk_code="KIOSK-4", text="3-10-01", wheelchair=True,
+            "text", kiosk_code="KIOSK-4", text="3-167", wheelchair=True,
         )
         self.assertEqual(status, 200)
-        self.assert_route(result, "3-10-01", "vi")
+        self.assert_route(result, "3-167", "vi")
         route = result["route"]
         [transfer] = [step for step in route["steps"] if step["start"]["floor_id"] != step["end"]["floor_id"]]
         self.assertEqual(transfer["kind"], "elevator")
@@ -148,7 +164,7 @@ class BilingualWayfindingTest(unittest.TestCase):
                 and abs(point["y"] * plan["height"] - landmark["y"]) < 1e-6
                 for landmark in plan["landmarks"]
             ))
-        [room] = [room for room in lower["rooms"] if room["code"] == "3-10-01"]
+        [room] = [room for room in lower["rooms"] if room["code"] == "3-167"]
         arrival = route["arrival"]
         self.assertEqual(room["door_side"], "south")
         self.assertAlmostEqual(arrival["x"] * lower["width"], room["x"] + room["width"] / 2)
@@ -163,15 +179,15 @@ class BilingualWayfindingTest(unittest.TestCase):
             with self.subTest(answer=answer):
                 status, turn = self.submit("text", text=answer, context=first["context"])
                 self.assertEqual(status, 200)
-                self.assert_route(turn, "4-01-01", "en", elevator=True)
+                self.assert_route(turn, "4-001", "en", elevator=True)
 
     def test_voice_auto_and_explicit_languages(self):
         for preference, detected, transcript, expected, spoken_code in (
-            ("auto", "english", "Room four oh four eleven. I use a wheelchair.", "en", "four, zero four, one one"),
-            ("auto", "vi", "Phòng bốn không bốn mười một, tôi dùng xe lăn", "vi", "bốn, không bốn, một một"),
-            ("en", "vi", "Room 4-04-11. I use a wheelchair.", "en", "four, zero four, one one"),
-            ("vi", None, "Phòng 4-04-11, tôi dùng xe lăn", "vi", "bốn, không bốn, một một"),
-            ("auto", None, "Where is room 4-04-11? I use a wheelchair.", "en", "four, zero four, one one"),
+            ("auto", "english", "Room four oh five three. I use a wheelchair.", "en", "four, zero five three"),
+            ("auto", "vi", "Phòng bốn không năm ba, tôi dùng xe lăn", "vi", "bốn, không năm ba"),
+            ("en", "vi", "Room 4-053. I use a wheelchair.", "en", "four, zero five three"),
+            ("vi", None, "Phòng 4-053, tôi dùng xe lăn", "vi", "bốn, không năm ba"),
+            ("auto", None, "Where is room 4-053? I use a wheelchair.", "en", "four, zero five three"),
         ):
             with self.subTest(language=preference, transcript=transcript):
                 mock_audio = b"ID3-mocked-mp3"
@@ -183,7 +199,7 @@ class BilingualWayfindingTest(unittest.TestCase):
                 status, result = self.submit("voice", language=preference, audio_base64=wav_fixture())
                 self.assertEqual(status, 200)
                 self.assertEqual(result["transcript"], transcript)
-                self.assert_route(result, "4-04-11", expected, elevator=True)
+                self.assert_route(result, "4-053", expected, elevator=True)
                 self.assertEqual((result["speech_status"], result["audio_media_type"]), ("ok", "audio/mpeg"))
                 self.assertEqual(base64.b64decode(result["audio_base64"]), mock_audio)
 
@@ -205,12 +221,12 @@ class BilingualWayfindingTest(unittest.TestCase):
         with patch.object(settings, "ELEVENLABS_API_KEY", SecretStr("mock-eleven")), \
                 patch("app.services.elevenlabs.urlopen") as eleven:
             eleven.side_effect = [
-                io.BytesIO(json.dumps({"text": "Phòng 4-04-11, tôi dùng xe lăn", "language_code": "vie"}).encode()),
+                io.BytesIO(json.dumps({"text": "Phòng 4-053, tôi dùng xe lăn", "language_code": "vie"}).encode()),
                 io.BytesIO(mock_audio),
             ]
             status, result = self.submit("voice", audio_base64=wav_fixture())
         self.assertEqual(status, 200)
-        self.assert_route(result, "4-04-11", "vi", elevator=True)
+        self.assert_route(result, "4-053", "vi", elevator=True)
         self.assertEqual(base64.b64decode(result["audio_base64"]), mock_audio)
         self.openrouter.assert_not_called()
 
@@ -222,21 +238,21 @@ class BilingualWayfindingTest(unittest.TestCase):
         self.assertIn(f"/v1/text-to-speech/{settings.ELEVENLABS_VOICE_ID}", tts.full_url)
         speech_request = json.loads(tts.data)
         self.assertEqual(speech_request["language_code"], "vi")
-        self.assertIn("bốn, không bốn, một một", speech_request["text"])
+        self.assertIn("bốn, không năm ba", speech_request["text"])
 
     def test_english_route_survives_unavailable_speech(self):
         self.openrouter.side_effect = [
-            io.BytesIO(b'{"text":"Room 4-04-11. I use a wheelchair."}'),
+            io.BytesIO(b'{"text":"Room 4-053. I use a wheelchair."}'),
             HTTPError("https://openrouter.ai/api/v1/audio/speech", 503, "Unavailable", None, io.BytesIO()),
         ]
         status, result = self.submit("voice", language="en", audio_base64=wav_fixture())
         self.assertEqual(status, 200)
-        self.assert_route(result, "4-04-11", "en", elevator=True)
+        self.assert_route(result, "4-053", "en", elevator=True)
         self.assertEqual(result["speech_status"], "unavailable")
         self.assertIsNone(result["audio_base64"])
 
     def test_service_errors_keep_the_http_contract(self):
-        status, result = self.submit("text", kiosk_code="NO-SUCH-KIOSK", text="Room 4-04-11")
+        status, result = self.submit("text", kiosk_code="NO-SUCH-KIOSK", text="Room 4-053")
         self.assertEqual(status, settings.WAYFINDING_ERROR_STATUS["kiosk_not_found"])
         self.assertEqual(result, {"detail": "No active kiosk found."})
 
@@ -284,7 +300,7 @@ class BilingualWayfindingTest(unittest.TestCase):
                 )
                 self.assertEqual(status, 200)
                 self.assertEqual(result["speech_status"], "skipped")
-                self.assert_route(result, "4-01-01", language, elevator=True)
+                self.assert_route(result, "4-001", language, elevator=True)
 
 
 if __name__ == "__main__":

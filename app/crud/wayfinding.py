@@ -26,12 +26,13 @@ def site_floors(db: Session, site_id: int):
     )
 
 
-def floor_nodes(db: Session, site_id: int, floor_ids: Collection[int]):
-    return db.scalars(
-        select(NavigationNode).where(
-            NavigationNode.site_id == site_id, NavigationNode.floor_id.in_(floor_ids),
-        )
+def floor_nodes(db: Session, site_id: int, floor_ids: Collection[int], node_ids: Collection[int] | None = None):
+    query = select(NavigationNode).where(
+        NavigationNode.site_id == site_id, NavigationNode.floor_id.in_(floor_ids),
     )
+    if node_ids is not None:
+        query = query.where(NavigationNode.id.in_(node_ids))
+    return db.scalars(query)
 
 
 def active_edges(db: Session, site_id: int, wheelchair: bool):

@@ -18,6 +18,15 @@ export default defineConfig(({ mode }) => {
   }
   return {
     plugins: [vue()],
+    // Hai trang: giới thiệu (index.html) và màn hình kiosk (kiosk.html).
+    build: {
+      rollupOptions: {
+        input: {
+          main: fileURLToPath(new URL('index.html', import.meta.url)),
+          kiosk: fileURLToPath(new URL('kiosk.html', import.meta.url)),
+        },
+      },
+    },
     server: { host: '127.0.0.1', port: 5173, proxy },
     preview: { host: '127.0.0.1', port: 4173, proxy },
   }

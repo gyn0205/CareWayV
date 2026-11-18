@@ -52,7 +52,7 @@ function extrudedOutline(points, depth, top, color, edges) {
 
 function planSolids(plan, destinationCode) {
   const solids = new Group()
-  const target = zoneCode(destinationCode)
+  const target = zoneCode(destinationCode, plan.rooms)
   for (const zone of plan.zones) {
     if (!zone.outline?.length) continue
     const palette = toneColors[zone.tone] ?? toneColors.orange
@@ -103,13 +103,13 @@ function planBoxes(plan, destinationCode) {
   for (const sign of plan.exits ?? []) box(sign.x, sign.y, 34, 13, 0, 5, '#2e9658')
 
   // Mặt bằng mới chỉ dựng phòng của khu đích để bản đồ gọn như bảng thật.
-  const target = zoneCode(destinationCode)
-  const rooms = detailed ? plan.rooms.filter((room) => zoneCode(room.code) === target) : plan.rooms
+  const target = zoneCode(destinationCode, plan.rooms)
+  const rooms = detailed ? plan.rooms.filter((room) => room.zone === target) : plan.rooms
   for (const [index, room] of rooms.entries()) {
     const door = roomEntrance(room, plan.corridors)
     const north = door.side === 'north'
     const z = room.y + room.height / 2
-    const [floorColor, accent] = zoneColors.get(room.code.split('-').slice(0, 2).join('-')) ?? roomColors[0]
+    const [floorColor, accent] = zoneColors.get(room.zone) ?? roomColors[0]
     const destination = room.code === destinationCode
     const wall = destination ? '#d64534' : '#a99d88'
     const thickness = 2.5

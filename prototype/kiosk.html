@@ -1,0 +1,845 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CareWayV Kiosk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* Bảng màu giữ theo frontend/src/style.css */
+:root {
+  --navy: #0c3653; --blue: #076d92; --blue-dark: #075470; --muted: #526b7d;
+  --line: #dce7ed; --pale: #eaf5fa; --gold: #b9862c; --bg: #f3f7f9; --card: #fff;
+  --target: #d64534; --route: #1f5fd6;
+  --zone-orange: #f7cfa2; --zone-orange-edge: #e2a25f; --zone-orange-ink: #7a3f0c;
+  --zone-green: #b7e0c0; --zone-green-edge: #5eae76; --zone-green-ink: #1c5f34;
+  --desk: #c9e7ef; --desk-edge: #0c7294;
+  --hall: #f7e4a3; --hall-edge: #ddbd5e; --sun: #e3e5e8; --sun-shade: #c5cad0; --exit: #2e9658;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  font-family: "Be Vietnam Pro", system-ui, sans-serif; color: var(--navy); background: var(--bg);
+  display: grid; grid-template-rows: auto 1fr; overflow: hidden; /* kiosk: 1 màn hình, không cuộn */
+}
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+svg.i { width: 1em; height: 1em; flex: none; }
+
+/* ---------- Thanh trên: thương hiệu, vị trí cố định, giờ, ngôn ngữ ---------- */
+.top {
+  display: flex; align-items: center; gap: 20px; padding: 14px 28px;
+  background: var(--card); border-bottom: 1px solid var(--line);
+}
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand-mark { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; background: var(--navy); color: #fff; font-size: 24px; }
+.brand b { font-size: 22px; letter-spacing: -.02em; }
+.brand b span { color: var(--gold); }
+.brand small { display: block; color: var(--muted); font-size: 12px; margin-top: 1px; }
+.here {
+  margin-left: 18px; display: flex; align-items: center; gap: 10px; padding: 8px 16px 8px 10px;
+  border-radius: 999px; background: var(--pale); font-weight: 600; font-size: 15px;
+}
+.here .dot { width: 26px; height: 26px; border-radius: 50%; background: var(--route); display: grid; place-items: center; color: #fff; font-size: 14px; box-shadow: 0 0 0 5px rgba(31,95,214,.18); }
+.here em { font-style: normal; color: var(--muted); font-weight: 500; }
+.spacer { flex: 1; }
+.clock { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.lang { display: flex; border: 1px solid var(--line); border-radius: 12px; padding: 3px; background: var(--bg); }
+.lang button { border: 0; background: none; padding: 7px 14px; border-radius: 9px; font-weight: 700; font-size: 14px; color: var(--muted); }
+.lang button[aria-pressed="true"] { background: var(--navy); color: #fff; }
+
+/* ---------- Thân: bản đồ trái + bảng hỏi phải ---------- */
+.stage { display: grid; grid-template-columns: 1fr min(500px, 36vw); min-height: 0; }
+.map-wrap { display: grid; grid-template-columns: 200px 1fr; min-height: 0; padding: 18px 8px 18px 24px; gap: 8px; }
+.rail { display: flex; flex-direction: column; gap: 18px; min-height: 0; }
+.floor-title { font-size: 13px; font-weight: 700; letter-spacing: .08em; color: var(--muted); }
+.floor-title b { display: block; font-size: 40px; letter-spacing: -.03em; color: var(--navy); line-height: 1.05; margin-top: 2px; }
+.floor-title i { font-style: normal; display: block; font-size: 15px; letter-spacing: 0; font-weight: 600; color: var(--muted); }
+.floors { display: grid; gap: 8px; }
+.floors button {
+  position: relative; display: flex; align-items: center; justify-content: space-between; gap: 6px;
+  padding: 11px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--card);
+  font-weight: 700; font-size: 16px; text-align: left;
+}
+.floors button small { font-weight: 600; font-size: 11px; color: var(--muted); }
+.floors button[aria-pressed="true"] { background: var(--navy); border-color: var(--navy); color: #fff; }
+.floors button[aria-pressed="true"] small { color: #bcd3e2; }
+.floors .badge { position: absolute; top: -7px; right: -7px; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: var(--target); color: #fff; font-size: 12px; display: grid; place-items: center; }
+.legend { display: grid; gap: 7px; font-size: 13px; color: var(--muted); margin-top: auto; }
+.legend div { display: flex; align-items: center; gap: 9px; }
+.legend .sw { width: 18px; height: 18px; border-radius: 5px; flex: none; display: grid; place-items: center; font-size: 9px; font-weight: 800; }
+.legend p { margin: 6px 0 0; font-size: 11px; }
+.map { min-height: 0; position: relative; }
+.map svg { width: 100%; height: 100%; display: block; }
+
+/* Khu, nhãn song ngữ trên bản đồ */
+.zone { stroke-width: 2.5; transition: opacity .3s, filter .3s; }
+.zone.orange { fill: var(--zone-orange); stroke: var(--zone-orange-edge); }
+.zone.green { fill: var(--zone-green); stroke: var(--zone-green-edge); }
+.zone.desk { fill: var(--desk); stroke: var(--desk-edge); }
+.dim .zone:not(.on):not(.cand) { opacity: .45; }
+.zone.on { stroke: var(--target); stroke-width: 6; }
+.zone.cand { stroke: var(--target); stroke-width: 5; stroke-dasharray: 14 8; animation: march 1s linear infinite; }
+@keyframes march { to { stroke-dashoffset: -22; } }
+.zl { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; gap: 2px; line-height: 1.12; pointer-events: none; }
+.zl .n { width: 26px; height: 26px; border-radius: 50%; background: #2c2823; color: #fff; font-weight: 800; font-size: 15px; display: grid; place-items: center; margin-bottom: 3px; }
+.zl .vi { font-weight: 700; font-size: 17px; }
+.zl .en { font-weight: 500; font-size: 14px; opacity: .78; font-style: italic; }
+.zl.orange { color: var(--zone-orange-ink); } .zl.green { color: var(--zone-green-ink); } .zl.desk { color: var(--blue-dark); }
+.zl.sm .vi { font-size: 12.5px; } .zl.sm .en { font-size: 11px; } .zl.sm .n { width: 22px; height: 22px; font-size: 13px; }
+.yah-ring { fill: var(--route); opacity: .25; animation: pulse 1.8s ease-out infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes pulse { from { transform: scale(.6); opacity: .45; } to { transform: scale(2.2); opacity: 0; } }
+
+/* ---------- Bảng hỏi bên phải ---------- */
+.panel { background: var(--card); border-left: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+.panel-body { flex: 1; overflow-y: auto; padding: 26px 30px 16px; display: flex; flex-direction: column; gap: 18px; }
+.panel-foot { border-top: 1px solid var(--line); padding: 12px 30px; display: flex; align-items: center; gap: 12px; font-size: 14px; color: var(--muted); }
+h1 { margin: 0; font-size: 30px; line-height: 1.12; letter-spacing: -.03em; }
+.sub { margin: 4px 0 0; color: var(--muted); font-size: 16px; }
+.mic-zone { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 8px 0 0; }
+.mic {
+  width: 112px; height: 112px; border-radius: 50%; border: 0; color: #fff; font-size: 46px; display: grid; place-items: center;
+  background: radial-gradient(circle at 35% 30%, #1592bd, var(--blue-dark)); box-shadow: 0 14px 34px rgba(7,84,112,.35), 0 0 0 10px var(--pale);
+  transition: transform .15s;
+}
+.mic:active { transform: scale(.96); }
+.mic-label { font-weight: 700; font-size: 19px; text-align: center; }
+.mic-label small { display: block; font-weight: 500; font-size: 14px; color: var(--muted); }
+.or { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 13px; }
+.or::before, .or::after { content: ""; height: 1px; flex: 1; background: var(--line); }
+.ask { display: flex; gap: 8px; }
+.ask input { flex: 1; min-width: 0; padding: 15px 16px; border-radius: 14px; border: 1.5px solid var(--line); font-size: 17px; background: var(--bg); }
+.ask input:focus { outline: none; border-color: var(--blue); background: #fff; }
+.ask button { border: 0; border-radius: 14px; padding: 0 20px; background: var(--navy); color: #fff; font-size: 22px; display: grid; place-items: center; }
+.hint { margin: -12px 0 0; font-size: 13px; color: var(--muted); }
+.sec-title { margin: 0 0 10px; font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.quick { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.quick button {
+  display: flex; gap: 11px; align-items: center; text-align: left; padding: 10px 12px; border-radius: 14px;
+  border: 1px solid var(--line); background: var(--card); transition: border-color .15s, background .15s;
+}
+.quick button:hover { border-color: var(--blue); background: var(--pale); }
+.quick .qi { width: 36px; height: 36px; border-radius: 10px; background: var(--pale); color: var(--blue); display: grid; place-items: center; font-size: 16px; font-weight: 800; flex: none; }
+.quick b { display: block; font-size: 14.5px; line-height: 1.25; }
+.quick small { display: block; font-size: 12px; color: var(--muted); font-style: italic; margin-top: 2px; }
+.switch { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.switch input { appearance: none; width: 44px; height: 26px; border-radius: 13px; background: var(--line); position: relative; transition: background .2s; margin: 0 0 0 auto; cursor: pointer; }
+.switch input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: left .2s; box-shadow: 0 1px 3px rgba(0,0,0,.2); }
+.switch input:checked { background: var(--blue); }
+.switch input:checked::after { left: 21px; }
+.switch span { flex: 1; color: var(--navy); font-weight: 600; }
+.help { display: flex; gap: 10px; align-items: center; padding: 9px 12px; border-radius: 12px; background: #fbf5ea; color: #6f5220; font-size: 14px; }
+
+/* Trạng thái nghe / đang tìm */
+.listen { display: flex; flex-direction: column; align-items: center; gap: 18px; padding: 24px 0; text-align: center; }
+.bars { display: flex; gap: 6px; height: 70px; align-items: center; }
+.bars i { width: 9px; border-radius: 5px; background: var(--blue); animation: bar 1s ease-in-out infinite; }
+.bars i:nth-child(2) { animation-delay: .15s; } .bars i:nth-child(3) { animation-delay: .3s; } .bars i:nth-child(4) { animation-delay: .45s; } .bars i:nth-child(5) { animation-delay: .6s; }
+@keyframes bar { 0%,100% { height: 14px; } 50% { height: 66px; } }
+.said { font-size: 22px; font-weight: 700; min-height: 1.4em; }
+.ghost { border: 1px solid var(--line); background: var(--card); border-radius: 12px; padding: 10px 16px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; }
+.spinner { width: 46px; height: 46px; border-radius: 50%; border: 5px solid var(--pale); border-top-color: var(--blue); animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Kết quả */
+.res-top { display: flex; align-items: center; gap: 10px; }
+.bubble { margin: 0; padding: 10px 14px; border-radius: 14px 14px 14px 4px; background: var(--pale); font-size: 15px; }
+.bubble b { color: var(--muted); font-weight: 600; margin-right: 4px; }
+.cands { display: grid; gap: 9px; }
+.cand-btn { display: flex; gap: 12px; align-items: center; text-align: left; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--line); background: var(--card); }
+.cand-btn:hover { border-color: var(--target); background: #fff7f5; }
+.cand-btn .fl { flex: none; width: 46px; height: 46px; border-radius: 12px; display: grid; place-items: center; background: var(--bg); font-weight: 800; font-size: 13px; line-height: 1; text-align: center; }
+.cand-btn .fl.here-fl { background: var(--navy); color: #fff; }
+.cand-btn b { display: block; font-size: 15.5px; }
+.cand-btn small { display: block; font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+.dest { border-radius: 18px; padding: 18px 20px; background: var(--navy); color: #fff; display: grid; gap: 4px; }
+.dest .k { font-size: 12px; letter-spacing: .1em; font-weight: 700; color: #f2c46d; text-transform: uppercase; }
+.dest h2 { margin: 2px 0 0; font-size: 26px; line-height: 1.15; letter-spacing: -.02em; }
+.dest .en { color: #bcd3e2; font-style: italic; font-size: 15px; }
+.dest .room { margin-top: 6px; font-size: 15px; color: #e3eef5; }
+.meta { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.meta span { display: inline-flex; gap: 6px; align-items: center; padding: 5px 10px; border-radius: 999px; background: rgba(255,255,255,.12); font-size: 13px; font-weight: 600; }
+.actions { display: flex; gap: 8px; }
+.actions .ghost { flex: 1; justify-content: center; }
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; counter-reset: s; }
+.steps li { display: flex; gap: 12px; padding: 8px 10px; border-radius: 12px; font-size: 15.5px; line-height: 1.4; transition: background .25s; }
+.steps li::before { counter-increment: s; content: counter(s); flex: none; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--pale); color: var(--blue-dark); font-weight: 800; font-size: 14px; }
+.steps li.xfer::before { content: "⇅"; background: #efe9ff; color: #5a3fc0; }
+.steps li.act { background: var(--pale); }
+.steps li.act::before { background: var(--route); color: #fff; }
+.steps li.done { color: var(--muted); }
+.back-timer { flex: 1; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
+.back-timer i { display: block; height: 100%; background: var(--blue); width: 100%; transform-origin: left; }
+.none-box { padding: 20px; border-radius: 16px; background: #fff7f5; border: 1px solid #f3d3cc; }
+.none-box h2 { margin: 0 0 6px; font-size: 22px; }
+.none-box p { margin: 0 0 14px; color: var(--muted); }
+.primary { border: 0; border-radius: 12px; padding: 12px 16px; background: var(--navy); color: #fff; font-weight: 700; display: inline-flex; gap: 8px; align-items: center; }
+.demo-tag { position: absolute; left: 12px; bottom: 10px; font-size: 12px; padding: 5px 10px; border-radius: 8px; background: rgba(12,54,83,.85); color: #fff; }
+
+/* Màn nhỏ (laptop thấp / máy tính bảng dọc): thu gọn để vẫn vừa 1 màn hình */
+@media (max-height: 760px) {
+  .panel-body { padding: 20px 24px 14px; gap: 16px; }
+  h1 { font-size: 27px; } .sub { font-size: 15px; }
+  .mic { width: 100px; height: 100px; font-size: 42px; }
+  .floor-title b { font-size: 32px; }
+}
+@media (max-width: 900px) {
+  body { overflow: auto; }
+  .stage { grid-template-columns: 1fr; }
+  .map-wrap { grid-template-columns: 1fr; height: 70vh; }
+  .rail { flex-direction: row; flex-wrap: wrap; align-items: center; }
+  .legend { display: none; }
+  .here em, .clock { display: none; }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <span class="brand-mark">
+      <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m16.2 7.8-2.1 6.3-6.3 2.1 2.1-6.3z"/></svg>
+    </span>
+    <div><b>CareWay<span>V</span></b><small id="tProduct"></small></div>
+  </div>
+  <!-- Vị trí kiosk chỉ hiển thị, không cho chọn: mỗi màn cài 1 lần khi lắp đặt (?kiosk=…) -->
+  <div class="here"><span class="dot">●</span><span id="tHere"></span></div>
+  <div class="spacer"></div>
+  <div class="clock" id="clock"></div>
+  <div class="lang" role="group" aria-label="Ngôn ngữ / Language">
+    <button data-lang="vi" aria-pressed="true">VI</button>
+    <button data-lang="en" aria-pressed="false">EN</button>
+  </div>
+</header>
+
+<main class="stage">
+  <section class="map-wrap">
+    <aside class="rail">
+      <div class="floor-title" id="floorTitle"></div>
+      <div class="floors" id="floors"></div>
+      <div class="legend" id="legend"></div>
+    </aside>
+    <div class="map" id="map"></div>
+  </section>
+  <section class="panel" aria-live="polite">
+    <div class="panel-body" id="panel"></div>
+    <div class="panel-foot" id="foot"></div>
+  </section>
+</main>
+
+<script src="floor-data.js"></script>
+<script>
+/* ================= Cấu hình kiosk (cài 1 lần cho mỗi màn) ================= */
+const params = new URLSearchParams(location.search);
+const KIOSKS = {
+  'KIOSK-4':   { floor: 4, lift: 'B', pt: [500, 740], liftPt: [500, 791] },
+  'KIOSK-4-A': { floor: 4, lift: 'A', pt: [500, 410], liftPt: [500, 358] },
+  'KIOSK-3':   { floor: 3, lift: 'B', pt: [500, 740], liftPt: [500, 791] },
+  'KIOSK-3-A': { floor: 3, lift: 'A', pt: [500, 410], liftPt: [500, 358] },
+};
+const KIOSK = KIOSKS[params.get('kiosk')] || KIOSKS['KIOSK-4'];
+const DEMO = params.get('demo') === '1';
+const IDLE_SECONDS = 60;
+
+/* ================= Chữ giao diện VI / EN (tên khu luôn song ngữ, không theo nút này) ================= */
+const T = {
+  vi: {
+    product: 'Chỉ đường trong bệnh viện',
+    here: (k) => `Bạn đang ở: Tầng ${k.floor} <em>· cạnh thang máy ${k.lift}</em>`,
+    floor: (n) => `Tầng ${n}`, floorUp: 'TẦNG', floorAlt: (n) => `Floor ${n}`,
+    yourFloor: 'bạn ở đây', yah: 'Bạn đang ở đây',
+    hello: 'Xin chào! Bạn muốn đến đâu?', helloAlt: 'Hello! Where would you like to go?',
+    speak: 'Nhấn để nói', speakAlt: 'Tap to speak', orType: 'hoặc nhập',
+    placeholder: 'Mã phòng, tên khoa, dịch vụ…', hint: 'Ví dụ: “Phòng 4-053”, “siêu âm bụng”, “nhà thuốc”',
+    quick: 'Điểm đến thường tìm', wheel: 'Ưu tiên tuyến cho xe lăn',
+    help: 'Cần tư vấn dịch vụ? Quầy Lễ tân – Tư vấn ở tầng 4, cạnh khu số 8.',
+    listening: 'Đang nghe…', simulated: 'mô phỏng giọng nói', cancel: 'Hủy', searching: 'Đang tìm đường…',
+    newSearch: 'Tìm nơi khác', youAsked: 'Bạn hỏi:',
+    pick: 'Bạn cần đến khu nào?',
+    manyZones: (n, q) => `Có ${n} khu có “${q}”. Trên phiếu của bạn ghi dịch vụ hoặc tầng nào?`,
+    manyNames: (n) => `Có ${n} nơi trùng tên. Bạn muốn đến nơi nào?`,
+    reply: 'Trả lời, ví dụ: “tầng 3” hoặc “siêu âm bụng”',
+    dest: 'Điểm đến', room: 'Phòng', replay: 'Xem lại đường đi', listen: 'Nghe chỉ dẫn',
+    min: (s) => s >= 60 ? `${Math.floor(s / 60)} phút ${s % 60} giây` : `${s} giây`,
+    back: (s) => `Tự quay về màn hình chính sau ${s} giây`, restart: 'Bắt đầu lại',
+    noneTitle: 'Chưa tìm thấy nơi bạn cần', noneText: 'Bạn thử nói mã phòng ghi trên phiếu, hoặc để nhân viên quầy tư vấn giúp bạn.',
+    toDesk: 'Chỉ đường tới quầy tư vấn', footIdle: 'Dữ liệu mô phỏng · Tầng 3–4',
+    legend: { yah: 'Bạn đang ở đây', route: 'Tuyến đi', dest: 'Điểm đến', lift: 'Thang máy', esc: 'Thang bộ', wc: 'Nhà vệ sinh', exit: 'Lối thoát hiểm', sun: 'Giếng trời' },
+    mapNote: 'Mặt bằng mô phỏng, chưa khảo sát thực địa.',
+    quickItems: [
+      { icon: '₫', key: 'cashier', vi: 'Quầy thanh toán', en: 'Cashier' },
+      { icon: '✚', key: 'pharmacy', vi: 'Nhà thuốc', en: 'Pharmacy' },
+      { icon: 'WC', key: 'wc', vi: 'Nhà vệ sinh', en: 'Restroom' },
+      { icon: '♥', key: '3-01', vi: 'Trung tâm Tim mạch', en: 'Cardiovascular Center' },
+    ],
+    // Các câu nói mô phỏng khi nhấn mic (luân phiên)
+    voice: ['Phòng 4-053 ở đâu?', 'Tôi đi siêu âm', 'Trung tâm Vú ở đâu?', 'Nhà thuốc ở đâu?'],
+    wcName: 'Nhà vệ sinh', wcEn: 'Restroom',
+    s: {
+      lane: (side) => `Từ kiosk, sang lối đi bên ${side === 'L' ? 'trái' : 'phải'} hành lang chính.`,
+      laneLift: (side) => `Ra khỏi thang máy, bước ra sảnh rồi sang lối đi bên ${side === 'L' ? 'trái' : 'phải'}.`,
+      walk: (m, up) => `Đi thẳng khoảng ${m} m về phía ${up ? 'đầu' : 'cuối'} hành lang.`,
+      enterSide: (z, side) => `${z} ở bên tay ${side === 'L' ? 'trái' : 'phải'} — vào cửa khu.`,
+      enterEnd: (z) => `Đi hết hành lang, cửa ${z} ở ngay trước mặt.`,
+      wc: (side) => `Nhà vệ sinh ở bên tay ${side === 'L' ? 'trái' : 'phải'}, trong lõi giữa hành lang.`,
+      room: (code, name) => `Trong khu, tìm biển phòng ${code} · ${name}.`,
+      toLift: (l, up) => `Đi tới thang máy ${l}, ngay ${up ? 'phía trên' : 'phía dưới'} kiosk trên bản đồ.`,
+      ride: (up, n) => `Đi thang máy ${up ? 'lên' : 'xuống'} Tầng ${n}.`,
+      zone: (z) => z.n ? `Khu số ${z.n} — ${z.vi}` : z.vi,
+    },
+  },
+  en: {
+    product: 'Hospital wayfinding',
+    here: (k) => `You are here: Floor ${k.floor} <em>· by elevator ${k.lift}</em>`,
+    floor: (n) => `Floor ${n}`, floorUp: 'FLOOR', floorAlt: (n) => `Tầng ${n}`,
+    yourFloor: 'you are here', yah: 'You are here',
+    hello: 'Hello! Where would you like to go?', helloAlt: 'Xin chào! Bạn muốn đến đâu?',
+    speak: 'Tap to speak', speakAlt: 'Nhấn để nói', orType: 'or type',
+    placeholder: 'Room code, department, service…', hint: 'For example: “Room 4-053”, “endoscopy”, “pharmacy”',
+    quick: 'Popular destinations', wheel: 'Wheelchair-friendly route',
+    help: 'Need service advice? The Reception & Advice desk is on floor 4, next to area 8.',
+    listening: 'Listening…', simulated: 'simulated voice', cancel: 'Cancel', searching: 'Finding your way…',
+    newSearch: 'New search', youAsked: 'You asked:',
+    pick: 'Which area do you need?',
+    manyZones: (n, q) => `${n} areas offer “${q}”. Which service or floor is on your slip?`,
+    manyNames: (n) => `${n} places share this name. Which one do you need?`,
+    reply: 'Reply, e.g. “floor 3” or “ultrasound breast”',
+    dest: 'Destination', room: 'Room', replay: 'Replay the walk', listen: 'Listen',
+    min: (s) => s >= 60 ? `${Math.floor(s / 60)} min ${s % 60} sec` : `${s} sec`,
+    back: (s) => `Returning to the home screen in ${s} s`, restart: 'Start over',
+    noneTitle: 'We could not find that place', noneText: 'Try the room code printed on your slip, or let the advice desk staff help you.',
+    toDesk: 'Directions to the advice desk', footIdle: 'Simulated data · Floors 3–4',
+    legend: { yah: 'You are here', route: 'Route', dest: 'Destination', lift: 'Elevator', esc: 'Stairs', wc: 'Restroom', exit: 'Emergency exit', sun: 'Sunroom' },
+    mapNote: 'Simulated floor plan, not yet surveyed on site.',
+    quickItems: [
+      { icon: '₫', key: 'cashier', vi: 'Quầy thanh toán', en: 'Cashier' },
+      { icon: '✚', key: 'pharmacy', vi: 'Nhà thuốc', en: 'Pharmacy' },
+      { icon: 'WC', key: 'wc', vi: 'Nhà vệ sinh', en: 'Restroom' },
+      { icon: '♥', key: '3-01', vi: 'Trung tâm Tim mạch', en: 'Cardiovascular Center' },
+    ],
+    voice: ['Where is room 4-053?', 'I need an ultrasound', 'Breast Center please', 'Where is the pharmacy?'],
+    wcName: 'Nhà vệ sinh', wcEn: 'Restroom',
+    s: {
+      lane: (side) => `From the kiosk, step over to the ${side === 'L' ? 'left' : 'right'} walkway of the main corridor.`,
+      laneLift: (side) => `Leave the elevator, step into the lobby and keep to the ${side === 'L' ? 'left' : 'right'} walkway.`,
+      walk: (m, up) => `Walk straight about ${m} m towards the ${up ? 'top' : 'bottom'} of the corridor.`,
+      enterSide: (z, side) => `${z} is on your ${side === 'L' ? 'left' : 'right'} — go through the area entrance.`,
+      enterEnd: (z) => `Walk to the end of the corridor; ${z} is straight ahead.`,
+      wc: (side) => `The restroom is on your ${side === 'L' ? 'left' : 'right'}, inside the corridor core.`,
+      room: (code, name) => `Inside the area, look for room sign ${code} · ${name}.`,
+      toLift: (l, up) => `Go to elevator ${l}, just ${up ? 'above' : 'below'} the kiosk on the map.`,
+      ride: (up, n) => `Take the elevator ${up ? 'up' : 'down'} to floor ${n}.`,
+      zone: (z) => z.n ? `Area ${z.n} — ${z.en}` : z.en,
+    },
+  },
+};
+
+/* ================= Trạng thái ================= */
+const S = {
+  lang: 'vi', view: KIOSK.floor, mode: 'idle', // idle | listen | busy | clarify | route | none
+  said: '', clar: null, route: null, voiceIdx: 0, run: 0, idleLeft: IDLE_SECONDS, active: -1, wheel: false,
+};
+const t = () => T[S.lang];
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const ZONES = Object.values(FLOOR.floors).flatMap((f) => f.zones);
+const zoneByCode = Object.fromEntries(ZONES.map((z) => [z.code, z]));
+
+/* ================= Tìm điểm đến (mô phỏng phần backend tra danh mục) ================= */
+const norm = (s) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/[^a-z0-9\- ]/g, ' ').replace(/\s+/g, ' ').trim();
+const STOP = new Set(('toi minh em anh chi con can muon di den o dau phong khu cho hoi duong lam sao nao the nay a nhe vay la ve dang co khong ko oi xin hay giup voi tim may ' +
+  'i im need to go where is the an please for my room find want how get do in at what which can you me show way directions going have appointment with of').split(' '));
+// Cách gọi khác → từ khóa trong danh mục
+const ALIAS = [[/\bultrasound\b/g, 'sieu am'], [/\bendoscopy\b/g, 'noi soi'], [/\bmua thuoc\b/g, 'nha thuoc'], [/\bthyroid\b/g, 'tuyen giap'], [/\bbreast\b(?! center)/g, 'vu'], [/\babdomen|abdominal\b/g, 'bung']];
+const tokens = (s) => norm(s).split(' ').filter(Boolean);
+const zoneTok = (z) => new Set(tokens(`${z.vi} ${z.en}`));
+
+function parse(text) {
+  let q = norm(text);
+  const fm = q.match(/\b(?:tang|floor|level)\s*([34])\b/);
+  const floor = fm ? Number(fm[1]) : null;
+  if (fm) q = q.replace(fm[0], ' ');
+  const code = q.match(/\b([34])\s*-\s*(\d{1,2})(?:\s*-\s*(\d{1,2}))?\b/);
+  if (code) q = q.replace(code[0], ' ');
+  let aliased = q; ALIAS.forEach(([re, rep]) => { aliased = aliased.replace(re, rep); });
+  const toks = aliased.split(' ').filter((w) => w && !STOP.has(w));
+  return { floor, code, toks, raw: text.trim() };
+}
+const has = (set, toks) => toks.every((w) => set.has(w));
+
+function search(text, prev) {
+  const p = parse(text);
+  // 1. Mã phòng / mã khu: tra thẳng
+  if (p.code) {
+    const z = zoneByCode[`${p.code[1]}-${p.code[2].padStart(2, '0')}`];
+    if (!z) return { type: 'none' };
+    const idx = p.code[3] ? Number(p.code[3]) - 1 : -1;
+    return { type: 'route', zone: z, roomIdx: z.rooms[idx] ? idx : -1 };
+  }
+  // 2. Đang hỏi lại: lọc ứng viên cũ theo tầng hoặc từ khóa bổ sung
+  if (prev) {
+    let c = prev.cands;
+    if (p.floor) c = c.filter((x) => x.zone.code[0] === String(p.floor));
+    const more = [...prev.toks, ...p.toks];
+    if (p.toks.length) {
+      const byRoom = roomMatches(more).filter((x) => prev.cands.some((y) => y.zone.code === x.zone.code));
+      if (byRoom.length) c = p.floor ? byRoom.filter((x) => x.zone.code[0] === String(p.floor)) : byRoom;
+      else if (!p.floor) c = [];
+    }
+    if (c.length === 1) return { type: 'route', zone: c[0].zone, roomIdx: c[0].roomIdx };
+    if (c.length > 1) return { type: 'clarify', cands: c, toks: more, label: prev.label };
+    // không khớp ứng viên cũ → coi như câu hỏi mới
+  }
+  if (!p.toks.length) return { type: 'none' };
+  const q = p.toks.join(' ');
+  // 3. Lối tắt đặc biệt: nhà vệ sinh, quầy thanh toán
+  if (/\b(wc|toilet|restroom|ve sinh)\b/.test(q)) return { type: 'wc' };
+  if (/\b(thanh toan|thu ngan|tra tien|cashier|pay|payment)\b/.test(q)) return { type: 'route', zone: zoneByCode[KIOSK.floor === 4 ? '4-01' : '3-10'], roomIdx: -1 };
+  // 4. Khớp tên khu (Việt hoặc Anh)
+  let zs = ZONES.filter((z) => has(zoneTok(z), p.toks));
+  if (p.floor) zs = zs.filter((z) => z.code[0] === String(p.floor));
+  if (zs.length === 1) return { type: 'route', zone: zs[0], roomIdx: -1 };
+  if (zs.length > 1) return { type: 'clarify', cands: sortHere(zs.map((zone) => ({ zone, roomIdx: -1 }))), toks: p.toks, label: null };
+  // 5. Khớp tên dịch vụ/phòng → nhóm theo khu
+  let rs = roomMatches(p.toks);
+  if (p.floor) rs = rs.filter((x) => x.zone.code[0] === String(p.floor));
+  if (rs.length === 1) return { type: 'route', zone: rs[0].zone, roomIdx: rs[0].roomIdx };
+  // nhãn hiển thị giữ dấu tiếng Việt: lấy từ câu gốc, bỏ từ dừng
+  const label = p.raw.replace(/[?.!,]/g, ' ').split(/\s+/).filter((w) => w && !STOP.has(norm(w))).join(' ');
+  if (rs.length > 1) return { type: 'clarify', cands: rs, toks: p.toks, label: label || q };
+  return { type: 'none' };
+}
+// Một ứng viên mỗi khu (phòng khớp đầu tiên), khu cùng tầng kiosk xếp trước
+function roomMatches(toks) {
+  const out = [];
+  ZONES.forEach((zone) => {
+    const i = zone.rooms.findIndex((r) => has(new Set(tokens(r)), toks));
+    if (i >= 0) out.push({ zone, roomIdx: i });
+  });
+  return sortHere(out);
+}
+const sortHere = (a) => a.sort((x, y) => (x.zone.code[0] !== String(KIOSK.floor)) - (y.zone.code[0] !== String(KIOSK.floor)) || x.zone.code.localeCompare(y.zone.code));
+
+/* ================= Tính tuyến (mô phỏng đồ thị: kiosk → làn hành lang → cửa khu) ================= */
+const LANE_L = 438, LANE_R = 562;
+const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+const plen = (pts) => pts.slice(1).reduce((s, p, i) => s + dist(pts[i], p), 0);
+const dedupe = (pts) => pts.filter((p, i) => !i || p[0] !== pts[i - 1][0] || p[1] !== pts[i - 1][1]);
+const meters = (u) => Math.max(5, Math.round(u * 0.14 / 5) * 5);
+
+function buildRoute(target) {
+  // target: { floor, door, kind: 'zone'|'wc', zone?, roomIdx? }
+  const K = KIOSK.pt, lane = target.door[0] < 500 ? LANE_L : LANE_R, side = lane === LANE_L ? 'L' : 'R';
+  const legs = [];
+  const mkSteps = (start, fromLift) => {
+    const D = target.door, out = [];
+    const walk = Math.abs(D[1] - start[1]);
+    out.push({ vi: T.vi.s[fromLift ? 'laneLift' : 'lane'](side), en: T.en.s[fromLift ? 'laneLift' : 'lane'](side), at: 0.12 });
+    if (walk > 20) out.push({ vi: T.vi.s.walk(meters(walk), D[1] < start[1]), en: T.en.s.walk(meters(walk), D[1] < start[1]), at: 0.8 });
+    // Trái/phải theo người đi: đi lên đầu bản đồ thì trùng bản đồ, đi xuống thì đảo lại
+    const zSide = D[0] < lane ? 'L' : 'R';
+    const real = D[1] < start[1] ? zSide : (zSide === 'L' ? 'R' : 'L');
+    if (target.kind === 'wc') {
+      out.push({ vi: T.vi.s.wc(real), en: T.en.s.wc(real), at: 1 });
+    } else {
+      const z = target.zone, end = D[0] === lane; // cửa ở đầu/cuối hành lang
+      out.push(end ? { vi: T.vi.s.enterEnd(T.vi.s.zone(z)), en: T.en.s.enterEnd(T.en.s.zone(z)), at: 1 }
+        : { vi: T.vi.s.enterSide(T.vi.s.zone(z), real), en: T.en.s.enterSide(T.en.s.zone(z), real), at: 1 });
+      if (target.roomIdx >= 0) {
+        const code = `${z.code}-${String(target.roomIdx + 1).padStart(2, '0')}`, name = z.rooms[target.roomIdx];
+        out.push({ vi: T.vi.s.room(code, name), en: T.en.s.room(code, name), at: 1 });
+      }
+    }
+    return out;
+  };
+  const tail = (from) => dedupe([...from, [lane, from.at(-1)[1]], [lane, target.door[1]], target.door]);
+  if (target.floor === KIOSK.floor) {
+    const pts = tail([K]);
+    legs.push({ floor: KIOSK.floor, pts, steps: mkSteps(K, false) });
+  } else {
+    const L = KIOSK.liftPt, up = target.floor > KIOSK.floor, liftAbove = L[1] < K[1];
+    legs.push({ floor: KIOSK.floor, pts: [K, L], xfer: true, steps: [
+      { vi: T.vi.s.toLift(KIOSK.lift, liftAbove), en: T.en.s.toLift(KIOSK.lift, liftAbove), at: 0.5 },
+      { vi: T.vi.s.ride(up, target.floor), en: T.en.s.ride(up, target.floor), at: 1, xfer: true },
+    ] });
+    const pts = tail([L, K]);
+    legs.push({ floor: target.floor, pts, steps: mkSteps(K, true) });
+  }
+  const units = legs.reduce((s, l) => s + plen(l.pts), 0);
+  const secs = Math.round(units * 0.12 + (legs.length > 1 ? 42 : 0) + 8);
+  return { ...target, legs, secs, m: meters(units) };
+}
+
+function targetFor(res) {
+  if (res.type === 'wc') {
+    // Nhà vệ sinh gần nhất theo trục dọc
+    const ys = [221, 907], y = ys.sort((a, b) => Math.abs(a - KIOSK.pt[1]) - Math.abs(b - KIOSK.pt[1]))[0];
+    return { kind: 'wc', floor: KIOSK.floor, door: [462, y] };
+  }
+  const z = res.zone;
+  return { kind: 'zone', floor: Number(z.code[0]), door: z.door, zone: z, roomIdx: res.roomIdx };
+}
+
+/* ================= Vẽ bản đồ SVG ================= */
+const NS = 'http://www.w3.org/2000/svg';
+// Tên ngắn cho các ô quá hẹp trên bản đồ (tên đầy đủ vẫn hiện ở bảng kết quả)
+const SHORT = { '4-01': ['Thanh toán', 'Cashier'], '3-10': ['Thanh toán', 'Cashier'], '4-14': ['Lễ tân Tư vấn', 'Reception'] };
+const ICON = {
+  mic: '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4"/></svg>',
+  arrow: '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
+  back: '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>',
+  play: '<svg class="i" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg>',
+  sound: '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4zM15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg>',
+  clock: '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+  updown: '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 15 5 5 5-5M7 9l5-5 5 5"/></svg>',
+  walk: '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="4" r="2"/><path d="m9 20 3-6 3 3v4M7 12l3-4 4 1 3 3"/></svg>',
+  wheel: '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="4" r="2"/><path d="M12 7v6h5l2 5M9 10a6 6 0 1 0 6 8"/></svg>',
+  info: '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>',
+};
+const el = (tag, attrs = {}, parent) => {
+  const n = document.createElementNS(NS, tag);
+  Object.entries(attrs).forEach(([k, v]) => n.setAttribute(k, v));
+  if (parent) parent.appendChild(n);
+  return n;
+};
+const svg = el('svg', { viewBox: `0 0 ${FLOOR.w} ${FLOOR.h}`, preserveAspectRatio: 'xMidYMid meet', role: 'img' });
+$('map').appendChild(svg);
+const gBase = el('g', {}, svg), gRoute = el('g', {}, svg), gTop = el('g', {}, svg);
+
+function drawFloor(f) {
+  const F = FLOOR.floors[f];
+  gBase.innerHTML = ''; gTop.innerHTML = '';
+  svg.setAttribute('aria-label', t().floor(f));
+  const [hx1, hy1, hx2, hy2] = FLOOR.hall;
+  el('rect', { x: hx1, y: hy1, width: hx2 - hx1, height: hy2 - hy1, fill: 'var(--hall)', stroke: 'var(--hall-edge)', 'stroke-width': 2 }, gBase);
+  F.sun.forEach(([x, y, w, h]) => el('rect', { x, y, width: w, height: h, fill: 'var(--sun)', stroke: 'var(--sun-shade)', 'stroke-width': 1.5 }, gBase));
+  const hl = highlights();
+  F.zones.forEach((z) => {
+    const cls = ['zone', z.tone]; if (hl.on === z.code) cls.push('on'); if (hl.cand.has(z.code)) cls.push('cand');
+    el('polygon', { points: z.pts.map((p) => p.join(',')).join(' '), class: cls.join(' '), 'data-code': z.code }, gBase);
+  });
+  // Lõi hành lang: WC, thang máy, giếng sảnh, thang bộ, bảng sơ đồ
+  F.core.forEach(([kind, x, y, w, h]) => {
+    const fill = { restroom: '#dfe3e7', lift: '#a9b3bd', void: '#cfd4da', exit_stair: '#fff', board: 'var(--navy)', escalator: '#8e98a3' }[kind] || '#ccc';
+    el('rect', { x, y, width: w, height: h, rx: 4, fill, stroke: kind === 'exit_stair' ? 'var(--exit)' : 'rgba(0,0,0,.15)', 'stroke-width': 1.5 }, gBase);
+    const label = { restroom: 'WC', lift: '⇅', escalator: '≡' }[kind];
+    if (label) { const tx = el('text', { x: x + w / 2, y: y + h / 2 + 6, 'text-anchor': 'middle', 'font-size': kind === 'lift' ? 26 : 16, 'font-weight': 800, fill: kind === 'lift' ? '#fff' : '#3d4a55' }, gBase); tx.textContent = label; }
+  });
+  F.exits.forEach(([x, y]) => {
+    el('rect', { x: x - 22, y: y - 10, width: 44, height: 20, rx: 4, fill: 'var(--exit)' }, gBase);
+    const tx = el('text', { x, y: y + 5, 'text-anchor': 'middle', 'font-size': 12, 'font-weight': 800, fill: '#fff' }, gBase); tx.textContent = 'EXIT';
+  });
+  // Nhãn khu: số + tên Việt + tên Anh (luôn song ngữ như bảng sơ đồ thật)
+  F.zones.forEach((z) => {
+    const [x, y, w, h] = z.lab, small = w < 140 || h < 90;
+    const [vi, en] = SHORT[z.code] || [z.vi, z.en]; // khu hẹp dùng tên ngắn để không tràn
+    const fo = el('foreignObject', { x: x - 4, y, width: w + 8, height: h }, gBase);
+    fo.innerHTML = `<div xmlns="http://www.w3.org/1999/xhtml" class="zl ${z.tone}${small ? ' sm' : ''}">${z.n ? `<span class="n">${z.n}</span>` : ''}<span class="vi">${esc(vi)}</span><span class="en">${esc(en)}</span></div>`;
+  });
+  // "Bạn đang ở đây" chỉ hiện trên tầng của kiosk
+  if (f === KIOSK.floor) {
+    const [kx, ky] = KIOSK.pt;
+    el('circle', { cx: kx, cy: ky, r: 22, class: 'yah-ring' }, gTop);
+    el('circle', { cx: kx, cy: ky, r: 13, fill: 'var(--route)', stroke: '#fff', 'stroke-width': 4 }, gTop);
+    const up = ky < 600, py = up ? ky + 26 : ky - 58;
+    el('rect', { x: kx + 18, y: py, width: 172, height: 34, rx: 17, fill: 'var(--route)' }, gTop);
+    const tx = el('text', { x: kx + 104, y: py + 22, 'text-anchor': 'middle', 'font-size': 16, 'font-weight': 700, fill: '#fff' }, gTop); tx.textContent = t().yah;
+  }
+  gBase.classList.toggle('dim', !!(hl.on || hl.cand.size));
+}
+function highlights() {
+  const cand = new Set(S.mode === 'clarify' ? S.clar.cands.map((c) => c.zone.code) : []);
+  return { on: S.mode === 'route' && S.route.kind === 'zone' ? S.route.zone.code : null, cand };
+}
+
+// Vẽ tuyến của tầng đang xem (đầy đủ, không hoạt ảnh)
+function drawRouteStatic() {
+  gRoute.innerHTML = '';
+  if (S.mode !== 'route') return;
+  S.route.legs.forEach((leg, i) => { if (leg.floor === S.view) routeLeg(leg, i, 1); });
+  destPin();
+}
+function routeLeg(leg, i, frac) {
+  const d = 'M' + leg.pts.map((p) => p.join(',')).join(' L');
+  el('path', { d, fill: 'none', stroke: '#fff', 'stroke-width': 16, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', opacity: .9 }, gRoute);
+  const p = el('path', { d, fill: 'none', stroke: 'var(--route)', 'stroke-width': 9, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, gRoute);
+  const L = p.getTotalLength();
+  p.style.strokeDasharray = L; p.style.strokeDashoffset = L * (1 - frac);
+  // Điểm chuyển tầng
+  if (leg.xfer) liftTag(leg.pts.at(-1), S.route.floor);
+  if (i > 0) liftTag(leg.pts[0], KIOSK.floor, true);
+  return p;
+}
+function liftTag([x, y], floor, arrive) {
+  el('circle', { cx: x, cy: y, r: 15, fill: '#5a3fc0', stroke: '#fff', 'stroke-width': 4 }, gRoute);
+  const w = 190, tx0 = x + 24, ty0 = y - 17;
+  el('rect', { x: tx0, y: ty0, width: w, height: 34, rx: 10, fill: '#fff', stroke: '#5a3fc0', 'stroke-width': 2 }, gRoute);
+  const tx = el('text', { x: tx0 + w / 2, y: ty0 + 23, 'text-anchor': 'middle', 'font-size': 15, 'font-weight': 700, fill: '#5a3fc0' }, gRoute);
+  tx.textContent = arrive ? `⇅ ${t().floor(floor)} → ${t().floor(S.route.floor)}` : `⇅ ${t().floor(KIOSK.floor)} → ${t().floor(floor)}`;
+}
+function destPin() {
+  const r = S.route, last = r.legs.at(-1);
+  if (last.floor !== S.view) return;
+  const [x, y] = last.pts.at(-1);
+  el('circle', { cx: x, cy: y, r: 15, fill: 'var(--target)', stroke: '#fff', 'stroke-width': 4 }, gRoute);
+}
+
+// Hoạt ảnh: vẽ dần tuyến + chấm người đi, tự chuyển tầng khi qua thang máy
+async function playRoute() {
+  const run = ++S.run;
+  for (let i = 0; i < S.route.legs.length; i++) {
+    const leg = S.route.legs[i];
+    S.view = leg.floor; drawFloor(S.view); renderRail(); gRoute.innerHTML = '';
+    // vẽ các chặng trước trên cùng tầng (không có ở dữ liệu hiện tại, giữ cho tổng quát)
+    const p = routeLeg(leg, i, 0);
+    const L = p.getTotalLength(), dur = Math.min(2600, Math.max(900, L * 2.4));
+    const dot = el('circle', { r: 11, fill: '#fff', stroke: 'var(--route)', 'stroke-width': 5 }, gRoute);
+    const t0 = performance.now();
+    await new Promise((done) => {
+      const tick = (now) => {
+        if (run !== S.run) return done();
+        const k = Math.min(1, (now - t0) / dur), e = k < .5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2;
+        p.style.strokeDashoffset = L * (1 - e);
+        const pt = p.getPointAtLength(L * e); dot.setAttribute('cx', pt.x); dot.setAttribute('cy', pt.y);
+        setActive(i, e);
+        k < 1 ? requestAnimationFrame(tick) : done();
+      };
+      requestAnimationFrame(tick);
+    });
+    if (run !== S.run) return;
+    if (i < S.route.legs.length - 1) await sleep(900);
+    if (run !== S.run) return;
+  }
+  destPin();
+  setActive(S.route.legs.length - 1, 1.01);
+  startIdleTimer();
+}
+// Tô bước đang đi trong danh sách chỉ dẫn theo tiến độ hoạt ảnh
+function setActive(legIdx, e) {
+  let n = 0, act = -1;
+  S.route.legs.forEach((leg, i) => leg.steps.forEach((st) => {
+    if (i < legIdx || (i === legIdx && e >= st.at)) act = n;
+    n++;
+  }));
+  if (act === S.active) return;
+  S.active = act;
+  document.querySelectorAll('.steps li').forEach((li, k) => {
+    li.classList.toggle('done', k < act); li.classList.toggle('act', k === act);
+    if (k === act) li.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); // bước đang đi luôn trong tầm nhìn
+  });
+}
+
+/* ================= Cột trái: tiêu đề tầng, nút tầng, chú giải ================= */
+function renderRail() {
+  $('floorTitle').innerHTML = `${t().floorUp}<b>${S.view}</b><i>${S.lang === 'vi' ? `Floor ${S.view}` : `Tầng ${S.view}`}</i>`;
+  const cand = S.mode === 'clarify' ? S.clar.cands : [];
+  $('floors').innerHTML = [4, 3].map((f) => {
+    const n = cand.filter((c) => c.zone.code[0] === String(f)).length;
+    return `<button data-floor="${f}" aria-pressed="${S.view === f}">${t().floor(f)}${f === KIOSK.floor ? `<small>● ${t().yourFloor}</small>` : ''}${n && f !== S.view ? `<span class="badge">${n}</span>` : ''}</button>`;
+  }).join('');
+  const lg = t().legend;
+  $('legend').innerHTML = `
+    <div><span class="sw" style="background:var(--route);border-radius:50%"></span>${lg.yah}</div>
+    <div><span class="sw" style="background:var(--route);height:6px"></span>${lg.route}</div>
+    <div><span class="sw" style="background:var(--target);border-radius:50%"></span>${lg.dest}</div>
+    <div><span class="sw" style="background:#a9b3bd;color:#fff">⇅</span>${lg.lift}</div>
+    <div><span class="sw" style="background:#8e98a3;color:#fff">≡</span>${lg.esc}</div>
+    <div><span class="sw" style="background:#dfe3e7">WC</span>${lg.wc}</div>
+    <div><span class="sw" style="background:var(--exit);color:#fff;width:28px">EXIT</span>${lg.exit}</div>
+    <div><span class="sw" style="background:var(--sun);border:1px solid var(--sun-shade)"></span>${lg.sun}</div>
+    <p>${t().mapNote}</p>`;
+}
+
+/* ================= Cột phải: các trạng thái ================= */
+function renderPanel() {
+  const L = t(), P = $('panel');
+  $('foot').innerHTML = '';
+  if (S.mode === 'idle') {
+    P.innerHTML = `
+      <div><h1>${L.hello}</h1><p class="sub">${L.helloAlt}</p></div>
+      <div class="mic-zone">
+        <button class="mic" id="micBtn" aria-label="${L.speak}">${ICON.mic}</button>
+        <div class="mic-label">${L.speak}<small>${L.speakAlt}</small></div>
+      </div>
+      <div class="or">${L.orType}</div>
+      <form class="ask" id="askForm"><input id="q" autocomplete="off" placeholder="${L.placeholder}" aria-label="${L.placeholder}"><button aria-label="OK">${ICON.arrow}</button></form>
+      <p class="hint">${L.hint}</p>
+      <div><p class="sec-title">${L.quick}</p><div class="quick">
+        ${L.quickItems.map((q) => `<button data-quick="${q.key}"><span class="qi">${q.icon}</span><span><b>${q.vi}</b><small>${q.en}</small></span></button>`).join('')}
+      </div></div>
+      <label class="switch">${ICON.wheel}<span>${L.wheel}</span><input type="checkbox" id="wheel" ${S.wheel ? 'checked' : ''}></label>`;
+    $('foot').innerHTML = `<div class="help" style="flex:1">${ICON.info}<span>${L.help}</span></div>`;
+  } else if (S.mode === 'listen') {
+    P.innerHTML = `<div class="listen"><div class="bars"><i></i><i></i><i></i><i></i><i></i></div>
+      <h1>${L.listening}</h1><div class="said" id="said"></div>
+      <p class="hint" style="margin:0">(${L.simulated})</p>
+      <button class="ghost" data-act="reset">${L.cancel}</button></div>`;
+  } else if (S.mode === 'busy') {
+    P.innerHTML = `${askedBubble()}<div class="listen"><div class="spinner"></div><h1 style="font-size:26px">${L.searching}</h1></div>`;
+  } else if (S.mode === 'clarify') {
+    const c = S.clar;
+    const msg = c.label ? L.manyZones(c.cands.length, c.label) : L.manyNames(c.cands.length);
+    P.innerHTML = `${topBar()}${askedBubble()}
+      <div><h1 style="font-size:28px">${L.pick}</h1><p class="sub">${esc(msg)}</p></div>
+      <form class="ask" id="askForm"><input id="q" autocomplete="off" placeholder="${L.reply}" aria-label="${L.reply}"><button aria-label="OK">${ICON.arrow}</button></form>
+      <div class="cands">${c.cands.map((x, i) => {
+        const f = x.zone.code[0], room = x.roomIdx >= 0 ? x.zone.rooms[x.roomIdx] : null;
+        return `<button class="cand-btn" data-cand="${i}"><span class="fl${Number(f) === KIOSK.floor ? ' here-fl' : ''}">${S.lang === 'vi' ? 'Tầng' : 'Floor'}<br>${f}</span>
+          <span>${room ? `<b>${esc(room)}</b><small>${esc(x.zone.vi)} · <i>${esc(x.zone.en)}</i></small>` : `<b>${esc(x.zone.vi)}</b><small><i>${esc(x.zone.en)}</i> · ${x.zone.code}</small>`}</span></button>`;
+      }).join('')}</div>
+`;
+  } else if (S.mode === 'route') {
+    const r = S.route, z = r.zone;
+    const title = r.kind === 'wc' ? L.wcName : z.vi, titleEn = r.kind === 'wc' ? L.wcEn : z.en;
+    const roomLine = r.kind === 'zone' && r.roomIdx >= 0 ? `<div class="room">${L.room} ${z.code}-${String(r.roomIdx + 1).padStart(2, '0')} · ${esc(z.rooms[r.roomIdx])}</div>` : '';
+    const floors = r.floor === KIOSK.floor ? L.floor(r.floor) : `${L.floor(KIOSK.floor)} → ${L.floor(r.floor)}`;
+    const steps = r.legs.flatMap((leg) => leg.steps);
+    P.innerHTML = `${topBar()}${askedBubble()}
+      <div class="dest"><span class="k">${L.dest}${r.kind === 'zone' ? ` · ${z.n ? (S.lang === 'vi' ? 'Khu số ' : 'Area ') + z.n + ' · ' : ''}${z.code}` : ''}</span>
+        <h2>${esc(title)}</h2><span class="en">${esc(titleEn)}</span>${roomLine}
+        <div class="meta"><span>${ICON.updown}${floors}</span><span>${ICON.clock}${L.min(r.secs)}</span><span>${ICON.walk}~${r.m} m</span></div></div>
+      <div class="actions"><button class="ghost" data-act="replay">${ICON.play}${L.replay}</button><button class="ghost" data-act="speak">${ICON.sound}${L.listen}</button></div>
+      <ol class="steps">${steps.map((s) => `<li class="${s.xfer ? 'xfer' : ''}">${esc(s[S.lang])}</li>`).join('')}</ol>`;
+    $('foot').innerHTML = `<span id="backTxt">${L.back(S.idleLeft)}</span><div class="back-timer"><i id="backBar"></i></div><button class="ghost" data-act="reset">${L.restart}</button>`;
+    S.active = -1;
+  } else if (S.mode === 'none') {
+    P.innerHTML = `${topBar()}${askedBubble()}
+      <div class="none-box"><h2>${L.noneTitle}</h2><p>${L.noneText}</p><button class="primary" data-act="desk">${ICON.walk}${L.toDesk}</button></div>
+      <form class="ask" id="askForm"><input id="q" autocomplete="off" placeholder="${L.placeholder}" aria-label="${L.placeholder}"><button aria-label="OK">${ICON.arrow}</button></form>`;
+  }
+}
+const topBar = () => `<div class="res-top"><button class="ghost" data-act="reset">${ICON.back}${t().newSearch}</button></div>`;
+const askedBubble = () => S.said ? `<p class="bubble"><b>${t().youAsked}</b>“${esc(S.said)}”</p>` : '';
+
+/* ================= Luồng xử lý ================= */
+async function ask(text) {
+  text = text.trim(); if (!text) return;
+  const prev = S.mode === 'clarify' ? S.clar : null;
+  // câu trả lời bổ sung: giữ cả câu hỏi gốc để khách thấy mạch hội thoại
+  S.said = prev && S.said ? `${S.said} → ${text}` : text; S.mode = 'busy'; const run = ++S.run; stopIdleTimer();
+  render();
+  await sleep(DEMO ? 700 : 550); // giả lập thời gian gọi API
+  if (run !== S.run) return;
+  show(search(text, prev));
+}
+function show(res) {
+  if (res.type === 'clarify') {
+    S.mode = 'clarify'; S.clar = res;
+    // xem tầng có nhiều ứng viên nhất, ưu tiên tầng kiosk
+    S.view = res.cands.some((c) => Number(c.zone.code[0]) === KIOSK.floor) ? KIOSK.floor : Number(res.cands[0].zone.code[0]);
+    render(); startIdleTimer();
+  } else if (res.type === 'route' || res.type === 'wc') {
+    S.mode = 'route'; S.route = buildRoute(targetFor(res)); S.idleLeft = IDLE_SECONDS;
+    render(); playRoute();
+  } else {
+    S.mode = 'none'; render(); startIdleTimer();
+  }
+}
+function reset() {
+  S.run++; S.mode = 'idle'; S.said = ''; S.clar = null; S.route = null; S.view = KIOSK.floor;
+  stopIdleTimer(); try { speechSynthesis.cancel(); } catch {}
+  render();
+}
+function render() { drawFloor(S.view); drawRouteStatic(); renderRail(); renderPanel(); }
+
+// Mic mô phỏng: hiện sóng âm, "nghe" một câu mẫu rồi gửi
+async function listen() {
+  const run = ++S.run; S.mode = 'listen'; render();
+  const line = t().voice[S.voiceIdx++ % t().voice.length];
+  await sleep(900);
+  for (let i = 1; i <= line.length; i++) {
+    if (run !== S.run) return;
+    const s = $('said'); if (s) s.textContent = line.slice(0, i);
+    await sleep(45);
+  }
+  await sleep(500);
+  if (run === S.run) ask(line);
+}
+
+/* ---------- Tự về màn hình chính khi không ai dùng ---------- */
+let idleTimer;
+function startIdleTimer() {
+  if (DEMO) return;
+  stopIdleTimer(); S.idleLeft = IDLE_SECONDS; tickIdle();
+  idleTimer = setInterval(() => { S.idleLeft--; tickIdle(); if (S.idleLeft <= 0) reset(); }, 1000);
+}
+function stopIdleTimer() { clearInterval(idleTimer); }
+function tickIdle() {
+  const b = $('backBar'), tx = $('backTxt');
+  if (b) b.style.transform = `scaleX(${S.idleLeft / IDLE_SECONDS})`;
+  if (tx) tx.textContent = t().back(S.idleLeft);
+}
+['pointerdown', 'keydown'].forEach((ev) => document.addEventListener(ev, () => { if (idleTimer && S.mode !== 'idle') { S.idleLeft = IDLE_SECONDS; tickIdle(); } }, true));
+
+/* ---------- Sự kiện ---------- */
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.id === 'micBtn') return listen();
+  if (b.dataset.lang) { S.lang = b.dataset.lang; document.documentElement.lang = S.lang; document.querySelectorAll('[data-lang]').forEach((x) => x.setAttribute('aria-pressed', x === b)); applyChrome(); render(); if (S.mode === 'route') { setActive(S.route.legs.length - 1, 1.01); tickIdle(); } return; }
+  if (b.dataset.floor) { S.view = Number(b.dataset.floor); drawFloor(S.view); drawRouteStatic(); renderRail(); return; }
+  if (b.dataset.quick) {
+    const k = b.dataset.quick, q = T[S.lang].quickItems.find((x) => x.key === k);
+    S.said = q[S.lang]; S.mode = 'busy'; render();
+    const res = k === 'wc' ? { type: 'wc' } : k === 'cashier' ? search('thanh toán') : k === 'pharmacy' ? search('nhà thuốc') : { type: 'route', zone: zoneByCode[k], roomIdx: -1 };
+    const run = ++S.run; setTimeout(() => run === S.run && show(res), 450); return;
+  }
+  if (b.dataset.cand) { const c = S.clar.cands[Number(b.dataset.cand)]; S.said = c.roomIdx >= 0 ? c.zone.rooms[c.roomIdx] : c.zone.vi; show({ type: 'route', zone: c.zone, roomIdx: c.roomIdx }); return; }
+  const act = b.dataset.act;
+  if (act === 'reset') reset();
+  if (act === 'replay') { S.active = -1; playRoute(); }
+  if (act === 'desk') { S.said = ''; show({ type: 'route', zone: zoneByCode['4-14'], roomIdx: -1 }); }
+  if (act === 'speak') speak();
+});
+document.addEventListener('submit', (e) => { e.preventDefault(); const q = $('q'); if (q) ask(q.value); });
+document.addEventListener('change', (e) => { if (e.target.id === 'wheel') S.wheel = e.target.checked; });
+
+// Đọc chỉ dẫn bằng giọng của trình duyệt (bản thật dùng TTS ở backend)
+function speak() {
+  try {
+    speechSynthesis.cancel();
+    const steps = S.route.legs.flatMap((l) => l.steps).map((s) => s[S.lang]).join(' ');
+    const u = new SpeechSynthesisUtterance(steps); u.lang = S.lang === 'vi' ? 'vi-VN' : 'en-US';
+    speechSynthesis.speak(u);
+  } catch {}
+}
+
+function applyChrome() {
+  $('tProduct').textContent = t().product;
+  $('tHere').innerHTML = t().here(KIOSK);
+}
+function clock() { const d = new Date(); $('clock').textContent = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
+clock(); setInterval(clock, 15000);
+applyChrome(); render();
+
+/* ---------- Chế độ demo (?demo=1): tự chạy vòng lặp cho trang giới thiệu ---------- */
+async function typeInto(text, run) {
+  const q = $('q'); if (!q) return;
+  for (let i = 1; i <= text.length; i++) { if (run !== S.demo) return; q.value = text.slice(0, i); await sleep(70); }
+  await sleep(350);
+}
+async function demoLoop() {
+  const run = S.demo = (S.demo || 0) + 1;
+  const wait = (ms) => sleep(ms).then(() => run === S.demo);
+  const routeDone = async () => { while (S.mode === 'route' && S.active < S.route.legs.flatMap((l) => l.steps).length - 1) { await sleep(200); if (run !== S.demo) return false; } return wait(3200); };
+  while (run === S.demo) {
+    if (!await wait(1400)) return;
+    await typeInto('Tôi đi siêu âm', run); await ask('Tôi đi siêu âm');
+    if (!await wait(2600)) return;
+    await typeInto('siêu âm vú', run); await ask('siêu âm vú');
+    if (!await routeDone()) return;
+    reset(); if (!await wait(1200)) return;
+    await typeInto('Phòng 4-053 ở đâu?', run); await ask('Phòng 4-053 ở đâu?');
+    if (!await routeDone()) return;
+    reset();
+  }
+}
+if (DEMO) {
+  document.body.insertAdjacentHTML('beforeend', '<span class="demo-tag">Demo tự chạy · dữ liệu mô phỏng</span>');
+  demoLoop();
+} else if (params.get('q')) {
+  ask(params.get('q'));
+}
+</script>
+</body>
+</html>

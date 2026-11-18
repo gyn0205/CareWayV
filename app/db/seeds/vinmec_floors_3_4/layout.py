@@ -71,7 +71,7 @@ def aisle_ys(zone: Zone) -> list[int]:
 @dataclass(frozen=True)
 class RoomSlot:
     zone: Zone
-    number: int
+    number: int     # số thứ tự phòng trên cả tầng (1, 2, 3…)
     name: str
     aisle: int      # hành lang nội bộ thứ mấy (0 = trên cùng)
     column: int     # cột thứ mấy tính từ lối vào
@@ -80,7 +80,8 @@ class RoomSlot:
 
     @property
     def code(self) -> str:
-        return f"{self.zone.code}-{self.number:02d}"
+        # Mã phòng theo tầng: "4-001", "4-002"…
+        return f"{self.zone.floor}-{self.number:03d}"
 
     @property
     def rect(self) -> tuple[int, int, int, int]:
@@ -139,13 +140,15 @@ class RoomSlot:
 def room_slots(zone: Zone) -> tuple[RoomSlot, ...]:
     aisles = shape(zone).aisles
     per_aisle = ceil(len(zone.rooms) / aisles)
+    # Đánh số nối tiếp các khu trước đó trên cùng tầng.
+    offset = sum(len(other.rooms) for other in ZONES if other.floor == zone.floor and other.number < zone.number)
     slots = []
     for aisle in range(aisles):
         names = zone.rooms[aisle * per_aisle:(aisle + 1) * per_aisle]
         split = (len(names) + 1) // 2
         for index, name in enumerate(names):
             slots.append(RoomSlot(
-                zone, aisle * per_aisle + index + 1, name, aisle,
+                zone, offset + aisle * per_aisle + index + 1, name, aisle,
                 index % split, -1 if index < split else 1, split,
             ))
     return tuple(slots)
