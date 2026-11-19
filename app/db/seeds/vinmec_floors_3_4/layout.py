@@ -178,10 +178,10 @@ def build_layout() -> Layout:
         label, label_en = LANDMARKS[code][3:5]
         layout.connect(
             (3, code), (4, code), kind,
-            f"Dùng {label} lên tầng 4 và ra sảnh.",
-            f"Dùng {label} xuống tầng 3 và ra sảnh.",
-            forward_en=f"Take {label_en} up to floor 4 and exit into the lobby.",
-            backward_en=f"Take {label_en} down to floor 3 and exit into the lobby.",
+            f"Đi {label} lên tầng 4.",
+            f"Đi {label} xuống tầng 3.",
+            forward_en=f"Take {label_en} up to floor 4.",
+            backward_en=f"Take {label_en} down to floor 3.",
         )
     return layout
 
@@ -203,19 +203,19 @@ def lane_stops(floor: int) -> dict[str, list[int]]:
 def add_hall(layout: Layout, floor: int) -> None:
     stops = lane_stops(floor)
     side_vi = {"W": "trái", "E": "phải"}
-    side_en = {"W": "left", "E": "right"}
-    # Hai làn đi bộ dọc hai bên lõi hành lang.
+    # Câu chỉ đường (rẽ trái/phải, bao nhiêu mét) do service ghép theo hướng người đi;
+    # cạnh ở đây chỉ mang cụm "qua mốc nào / đến đâu", "" = đoạn hành lang trơn.
     for lane, ys in stops.items():
         for y in ys:
             layout.nodes[floor, lane_code(lane, y)] = Point(lane_x(lane), y, f"Hành lang chính (bên {side_vi[lane]})")
         for a, b in zip(ys, ys[1:]):
-            distance = round((b - a) * 0.12)
+            # Mốc trong lõi mà đoạn này đi ngang qua (thang máy, cầu thang…), để khách đối chiếu.
+            passed = [mark for mark in landmarks(floor).values() if mark[2] != "kiosk" and a < mark[1] < b]
+            vi = "qua " + " và ".join(mark[3] for mark in passed) if passed else ""
+            en = "past " + " and ".join(mark[4] for mark in passed) if passed else ""
             layout.connect(
-                (floor, lane_code(lane, a)), (floor, lane_code(lane, b)), "walk",
-                f"Đi dọc hành lang chính (bên {side_vi[lane]}) khoảng {distance} m về phía cuối sơ đồ.",
-                f"Đi dọc hành lang chính (bên {side_vi[lane]}) khoảng {distance} m về phía đầu sơ đồ.",
-                forward_en=f"Follow the {side_en[lane]} side of the main corridor for about {distance} metres towards the bottom of the map.",
-                backward_en=f"Follow the {side_en[lane]} side of the main corridor for about {distance} metres towards the top of the map.",
+                (floor, lane_code(lane, a)), (floor, lane_code(lane, b)), "walk", vi, vi,
+                forward_en=en, backward_en=en,
             )
     # Lối băng ngang giữa các khối lõi; có nút giữa để vào thang máy, thang bộ.
     # Kiosk đứng ngay giữa lối băng ngang (trước bảng sơ đồ) nên chính nó là nút giữa.
@@ -234,25 +234,19 @@ def add_hall(layout: Layout, floor: int) -> None:
         for a, b in zip(chain, chain[1:]):
             layout.connect(
                 a, b, "walk",
-                "Băng ngang hành lang sang phía bên phải trên sơ đồ.",
-                "Băng ngang hành lang sang phía bên trái trên sơ đồ.",
-                forward_en="Cross the corridor to the right side of the map.",
-                backward_en="Cross the corridor to the left side of the map.",
+                "sang phía bên kia hành lang", "sang phía bên kia hành lang",
+                forward_en="across to the other side of the corridor",
+                backward_en="across to the other side of the corridor",
             )
     # Mốc trong lõi: thang máy, thang bộ, WC.
     for code, (x, y, _, label, label_en, link) in landmarks(floor).items():
         if link.startswith("crossing-"):
             continue
         layout.nodes[floor, code] = Point(x, y, label)
-        if link == "west":
-            source = (floor, lane_code("W", y))
-            forward, forward_en = f"Rẽ vào {label} trong lõi hành lang.", f"Turn into {label_en} in the corridor core."
-        else:
-            source = middles[int(link.removeprefix("mid-"))]
-            forward, forward_en = f"Đi tới {label} ở giữa hành lang.", f"Walk to {label_en} in the middle of the corridor."
+        source = (floor, lane_code("W", y)) if link == "west" else middles[int(link.removeprefix("mid-"))]
         layout.connect(
-            source, (floor, code), "walk", forward, f"Từ {label}, đi ra hành lang chính.",
-            forward_en=forward_en, backward_en=f"From {label_en}, head back to the main corridor.",
+            source, (floor, code), "walk", f"đến {label}", "ra hành lang",
+            forward_en=f"to {label_en}", backward_en="out to the corridor",
         )
 
 
@@ -268,38 +262,32 @@ def add_zone(layout: Layout, zone: Zone) -> None:
     layout.nodes[entry] = Point(door_x, door_y, f"Lối vào {zone.name}")
 
     # Nối cửa khu với làn hành lang: cửa bên hông hoặc cửa ở đầu/cuối hành lang.
+    # Quầy không có cửa riêng: "đến quầy…" thay vì "vào cửa…".
+    door, door_en = (f"vào cửa {zone.sign_label}", f"into {area_en}") if zone.signed else (
+        f"đến {zone.sign_label}", f"to the {name_en}")
     if door_y <= HALL_TOP or door_y >= HALL_BOTTOM:
         top = door_y <= HALL_TOP
         source = (floor, lane_code(lane, stops[0] if top else stops[-1]))
-        where, where_en = ("đầu", "top") if top else ("cuối", "bottom")
-        forward = f"Đi hết hành lang chính về phía {where} sơ đồ, vào {zone.sign_label}."
-        forward_en = f"Walk to the {where_en} end of the main corridor and enter {area_en}."
+        forward = f"đến cuối hành lang là cửa {zone.sign_label}"
+        forward_en = f"to the end of the corridor, where you enter {area_en}"
     else:
         source = (floor, lane_code(lane, door_y))
-        side, side_en = ("trái", "left") if lane == "W" else ("phải", "right")
-        forward = f"Rẽ {side} vào cửa {zone.sign_label}."
-        forward_en = f"Turn {side_en} into {area_en}."
+        forward, forward_en = door, door_en
     layout.connect(
-        source, entry, "walk", forward, f"Qua cửa {zone.name} để ra hành lang chính.",
-        forward_en=forward_en, backward_en=f"Exit {name_en} to reach the main corridor.",
+        source, entry, "walk", forward, "ra hành lang chính",
+        forward_en=forward_en, backward_en="out to the main corridor",
     )
 
-    # Lối đi trong khu từ cửa tới hành lang nội bộ.
+    # Lối đi trong khu từ cửa tới hành lang nội bộ (đoạn trơn, không cần nói gì thêm).
     previous = entry
     for index, (x, y) in enumerate(plan.path[1:], start=1):
         key = (floor, f"PATH-{zone.code}-{index}")
         layout.nodes[key] = Point(x, y, f"Lối đi trong {zone.name}")
-        layout.connect(
-            previous, key, "walk",
-            f"Đi theo lối chính trong {zone.name}.", f"Đi về phía cửa {zone.name}.",
-            forward_en=f"Follow the main walkway inside {name_en}.",
-            backward_en=f"Head back towards the entrance to {name_en}.",
-        )
+        layout.connect(previous, key, "walk", "", "", forward_en="", backward_en="")
         previous = key
 
     # Lối vào thứ hai (ví dụ hai lối hai bên quầy lễ tân khu KSK): nối vào cuối lối chính.
     if plan.side_door:
-        side, side_en = ("trái", "left") if lane == "W" else ("phải", "right")
         doors = [(floor, f"DOOR-{zone.code}-2")] + [
             (floor, f"DOOR-{zone.code}-2-{index}") for index in range(1, len(plan.side_door))
         ]
@@ -307,17 +295,11 @@ def add_zone(layout: Layout, zone: Zone) -> None:
             layout.nodes[key] = Point(x, y, f"Lối vào thứ hai · {zone.name}")
         layout.connect(
             (floor, lane_code(lane, plan.side_door[0][1])), doors[0], "walk",
-            f"Rẽ {side} vào lối bên của {zone.sign_label}.", f"Qua lối bên của {zone.name} để ra hành lang chính.",
-            forward_en=f"Turn {side_en} into the side entrance of {area_en}.",
-            backward_en=f"Exit {name_en} through the side entrance to reach the main corridor.",
+            f"vào lối bên của {zone.sign_label}", "ra hành lang chính",
+            forward_en=f"into the side entrance of {area_en}", backward_en="out to the main corridor",
         )
         for a, b in zip([*doors, previous], [*doors[1:], previous]):
-            layout.connect(
-                a, b, "walk",
-                f"Đi theo lối bên trong {zone.name}.", f"Đi về phía lối bên của {zone.name}.",
-                forward_en=f"Follow the side walkway inside {name_en}.",
-                backward_en=f"Head back towards the side entrance of {name_en}.",
-            )
+            layout.connect(a, b, "walk", "", "", forward_en="", backward_en="")
 
     # Xương sống nội bộ: nối điểm cuối lối vào với đầu mỗi hành lang nội bộ.
     spine_x, spine_y = plan.path[-1]
@@ -333,12 +315,7 @@ def add_zone(layout: Layout, zone: Zone) -> None:
         stations.append((y, key))
     stations.sort()
     for (_, a), (_, b) in zip(stations, stations[1:]):
-        layout.connect(
-            a, b, "walk",
-            f"Đi tiếp theo hành lang nội bộ của {zone.name}.", f"Quay lại hành lang nội bộ của {zone.name}.",
-            forward_en=f"Continue along the inner corridor of {name_en}.",
-            backward_en=f"Return along the inner corridor of {name_en}.",
-        )
+        layout.connect(a, b, "walk", "", "", forward_en="", backward_en="")
 
     # Mỗi cột cửa là một nút trên hành lang nội bộ; phòng nối từ nút cột.
     slots = room_slots(zone)
@@ -347,32 +324,18 @@ def add_zone(layout: Layout, zone: Zone) -> None:
         for slot in sorted({s.column: s for s in slots if s.aisle == aisle and s.bank < 0}.values(), key=lambda s: s.column):
             key = (floor, slot.junction_code)
             layout.nodes[key] = Point(*slot.junction, f"Cụm cửa {slot.column + 1} · {zone.name}")
-            if zone.signed:
-                forward = f"Đi sâu vào hành lang {zone.name} đến {slot.group_label}."
-                forward_en = f"Follow the corridor inside {name_en} to door group {slot.column + 1}."
-            else:
-                # Quầy (không phải khu khám): chỉ cần bước tới mặt quầy.
-                forward, forward_en = f"Bước tới mặt {zone.name}.", f"Step up to the {name_en}."
-            layout.connect(
-                previous, key, "walk", forward, f"Đi về phía lối vào {zone.name}.",
-                forward_en=forward_en, backward_en=f"Head back towards the entrance to {name_en}.",
-            )
+            # Người thật nhìn số trên cửa, không đếm "cụm cửa" → quãng đường do service nói.
+            layout.connect(previous, key, "walk", "", "", forward_en="", backward_en="")
             previous = key
     for slot in slots:
         entrance = (floor, slot.code)
         layout.nodes[entrance] = Point(*slot.door, f"{slot.code} · {slot.name}")
-        row_en = "upper row" if slot.bank < 0 else "lower row"
+        # Rẽ trái hay phải vào phòng do service tính theo chiều đi trong hành lang.
         if zone.signed:
-            forward = f"Tại {slot.group_label}, tìm biển {slot.code} ở {slot.row_label}: {slot.name}."
-            forward_en = f"At door group {slot.column + 1}, look for room {slot.code} in the {row_en} on the map."
+            forward, forward_en = f"đến phòng {slot.code} — {slot.name}", f"to room {slot.code}"
         else:
-            # Khách quay mặt vào quầy (hướng tây): phía trên bản đồ nằm bên tay phải.
-            side_en = "right" if slot.bank < 0 else "left"
-            side = "phải" if slot.bank < 0 else "trái"
-            forward = f"Gặp nhân viên ở bên {side} quầy ({slot.code}): {slot.name}."
-            forward_en = f"Speak to the staff on the {side_en} side of the desk ({slot.code})."
+            forward, forward_en = f"đến quầy {slot.code} — {slot.name}", f"to desk {slot.code}"
         layout.connect(
-            (floor, slot.junction_code), entrance, "walk", forward,
-            f"Rời {slot.code}, trở lại hành lang.",
-            forward_en=forward_en, backward_en=f"Leave {slot.code} and return to the corridor.",
+            (floor, slot.junction_code), entrance, "walk", forward, "",
+            forward_en=forward_en, backward_en="",
         )

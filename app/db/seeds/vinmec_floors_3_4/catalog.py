@@ -10,6 +10,17 @@ BOOKING_DESK = "Tư vấn dịch vụ và đặt lịch"
 # shortcut: danh sách cố định cho cơ sở mô phỏng, chuyển thành cột trong bảng khoa/phòng khi có dữ liệu bệnh viện thật.
 WALK_IN_ZONES = frozenset({"3-04", "3-10", "4-01", "4-14"})
 WALK_IN_ROOMS = frozenset({"Tiếp nhận mẫu nước tiểu", "Tiếp nhận mẫu gửi", "Tiếp nhận mẫu lưu trữ"})
+# Cách khách gọi tắt một khoa mà tên đầy đủ không chứa ("khám tổng quát", "cardiology").
+# shortcut: hằng số cho cơ sở mô phỏng, chuyển thành bảng bí danh khoa khi có dữ liệu bệnh viện thật.
+DEPARTMENT_ALIASES = {
+    "3-01": ("khám tim", "cardiology", "heart center"),
+    "3-03": ("ung thư", "oncology", "cancer center"),
+    "3-05": ("sức khỏe tinh thần", "tâm lý", "tâm thần", "mental health", "psychology", "psychiatry"),
+    "3-07": ("chỉnh hình", "orthopedics", "sports medicine"),
+    "4-08": ("khám tổng quát", "khám sức khỏe", "health check", "check up", "checkup"),
+    "4-10": ("thần kinh", "neurology"),
+    "4-13": ("nha khoa", "dentist", "ent"),
+}
 
 
 @dataclass(frozen=True)

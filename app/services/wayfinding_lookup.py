@@ -6,6 +6,7 @@ from difflib import SequenceMatcher
 from itertools import product
 
 from app.crud import wayfinding as catalog
+from app.db.seeds.vinmec_floors_3_4.catalog import DEPARTMENT_ALIASES
 from app.schema.wayfinding import Destination
 from app.services.wayfinding_language import normalize
 
@@ -244,9 +245,15 @@ def resolve(db, site, utterance, targets, prior_codes, fuzzy=True):
         if destination.kind == "department":
             for raw in DEPARTMENT_PARTS.split(destination.name):
                 part = DEPARTMENT_PREFIX.sub("", normalize(raw)).removesuffix(" vinmec")
+                # "Quầy Thanh toán tầng 3": tầng đã bị tách khỏi câu khách nói, nên tên gọi tắt cũng bỏ tầng.
+                part = spoken_floor(part)[1]
                 if len(part.split()) >= 2 and part not in names_by_phrase:
                     short_names[part].add(code)
     names_by_phrase.update(short_names)
+    for code, aliases in DEPARTMENT_ALIASES.items():
+        if code in targets and targets[code][0].kind == "department":
+            for alias in aliases:
+                names_by_phrase[normalize(alias)].add(code)
 
     room_digits = "|".join((*DIGITS, *EN_SMALL))
     explicit_room_code = re.search(rf"\b(?:phong|room) (?:\d|(?:{room_digits})\b)", query)

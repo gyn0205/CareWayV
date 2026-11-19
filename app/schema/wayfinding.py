@@ -156,7 +156,8 @@ class KioskMap(BaseModel):
 
 class DirectionResult(BaseModel):
     language: Language
-    status: Literal["route", "clarify", "not_found", "no_route"]
+    # emergency: câu báo cấp cứu cố định, không có lộ trình.
+    status: Literal["route", "clarify", "not_found", "no_route", "emergency"]
     message: str
     candidates: list[Destination] = Field(default_factory=list)
     # Câu trả lời nhanh hiện thành nút bấm (vd. "Đúng rồi" / "Không phải").

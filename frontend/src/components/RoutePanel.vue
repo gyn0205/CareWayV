@@ -144,7 +144,7 @@ onBeforeUnmount(() => {
 
   <template v-else>
     <div class="none-box">
-      <h2>{{ result.status === 'no_route' ? labels.noRouteTitle : labels.noneTitle }}</h2>
+      <h2>{{ { no_route: labels.noRouteTitle, emergency: labels.emergencyTitle }[result.status] ?? labels.noneTitle }}</h2>
       <p>{{ result.message }}</p>
       <button type="button" class="primary" :disabled="inputLocked" @click="$emit('desk')">
         <Footprints :size="18" /> {{ labels.toDesk }}

@@ -275,7 +275,7 @@ class BilingualWayfindingTest(unittest.TestCase):
         self.assertIn("Đỗ Thị Hương", turn["message"])
         status, first = self.submit("text", text="I have an appointment with doctor Pham Thu Ha")
         self.assertEqual((first["status"], first["language"]), ("clarify", "en"))
-        self.assertIn("Which one is yours?", first["message"])
+        self.assertIn("in Endoscopy Unit, floor 4", first["message"])
         code = first["candidates"][0]["code"]
         status, turn = self.submit("text", text=code, context=first["context"])
         self.assert_route(turn, code, "en")

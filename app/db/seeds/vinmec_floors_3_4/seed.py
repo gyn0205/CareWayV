@@ -154,7 +154,12 @@ def seed(session) -> dict[str, int]:
     services = sync(session, Service, scope, ("code",), service_rows.values())
     service_ids = {name: services[row["code"],].id for name, row in service_rows.items()}
     aliases = {
-        "Thanh toán viện phí": ("đóng viện phí", "quầy thu ngân", "pay my bill", "pay the hospital bill", "hospital billing"),
+        "Thanh toán viện phí": (
+            "thanh toán", "trả tiền", "đóng viện phí", "quầy thu ngân", "pay", "cashier",
+            "pay my bill", "pay the hospital bill", "hospital billing",
+        ),
+        "Siêu âm tim qua thành ngực": ("siêu âm tim", "echocardiogram", "heart ultrasound"),
+        "Khám mắt tổng quát": ("khám mắt", "eye exam"),
         "Tiếp nhận mẫu nước tiểu": ("nộp mẫu nước tiểu", "nộp mẫu tiểu", "urine sample", "urine specimen"),
         "Điện tâm đồ": ("ECG", "đo điện tim", "electrocardiogram", "EKG"),
         "Chụp nhũ ảnh": ("X-quang tuyến vú", "mammogram", "mammography"),

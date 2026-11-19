@@ -13,7 +13,7 @@ export async function requestDirections(mode, payload, signal) {
     signal,
   })
   const data = await response.json().catch(() => null)
-  const statuses = ['route', 'clarify', 'not_found', 'no_route']
+  const statuses = ['route', 'clarify', 'not_found', 'no_route', 'emergency']
   if (!response.ok || !statuses.includes(data?.status)) {
     const detail = typeof data?.detail === 'string' ? data.detail : ''
     throw new WayfindingRequestError(detail, response.status)
