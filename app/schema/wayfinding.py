@@ -13,6 +13,14 @@ class Clarification(BaseModel):
     candidate_codes: list[Code] = Field(min_length=1, max_length=40)
     wheelchair: bool = False
     language: Language | None = None
+    # Câu kiosk đang chờ khách đáp; None = chọn một trong các điểm đến (theo tầng / mã).
+    # confirm: "Có phải anh chị muốn đến …?" (khớp gần đúng).
+    # appointment: "Anh chị đã đặt lịch chưa?"; booking: chọn quầy tư vấn hay vẫn đến khoa.
+    pending: Literal["confirm", "appointment", "booking"] | None = None
+    # Khách đã cho biết có lịch hẹn chưa (None = chưa biết) → mỗi hội thoại chỉ hỏi một lần.
+    appointment: bool | None = None
+    # Bác sĩ khách đã nêu (khi hỏi lại vì trùng tên) → lượt sau vẫn hiện đúng tên trên thẻ / câu chỉ đường.
+    doctor_codes: list[Code] = Field(default_factory=list, max_length=40)
 
 
 class Turn(BaseModel):
@@ -49,6 +57,10 @@ class Destination(BaseModel):
     floor: int
     department: str | None = None
     description: str | None = None
+    # Bác sĩ khách hỏi, khám tại phòng này (vd. "PGS.TS.BS. Lê Minh Tuấn") — hiện trên thẻ để phân biệt người trùng tên.
+    doctor: str | None = None
+    # Mã khoa của phòng (khoa thì là chính mã khoa); chỉ dùng nội bộ, không trả về API.
+    department_code: str | None = Field(default=None, exclude=True)
 
 
 class Step(BaseModel):
@@ -147,6 +159,8 @@ class DirectionResult(BaseModel):
     status: Literal["route", "clarify", "not_found", "no_route"]
     message: str
     candidates: list[Destination] = Field(default_factory=list)
+    # Câu trả lời nhanh hiện thành nút bấm (vd. "Đúng rồi" / "Không phải").
+    replies: list[str] = Field(default_factory=list)
     context: Clarification | None = None
     route: Route | None = None
 

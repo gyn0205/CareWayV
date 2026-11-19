@@ -46,6 +46,8 @@ const talk = ref('off')
 const heard = ref('')
 // Câu khách đã hỏi (nối các câu trả lời bổ sung bằng "→" để thấy mạch hội thoại).
 const said = ref('')
+// Câu gần nhất đến từ giọng nói → hiện "Tôi nghe:" để khách thấy ngay khi kiosk nghe sai.
+const saidByVoice = ref(false)
 const activeStep = ref(-1)
 const walkDone = ref(false)
 const idleLeft = ref(IDLE_SECONDS)
@@ -87,6 +89,7 @@ function reset() {
   problem.value = ''
   query.value = ''
   said.value = ''
+  saidByVoice.value = false
   voiceActive.value = false
   voiceKey.value++
   stopTalk()
@@ -200,7 +203,9 @@ async function submit(kind, prepare, context, saidBase, turn = {}, spoken = fals
     context,
   }
   const saidBefore = said.value
+  const byVoiceBefore = saidByVoice.value
   said.value = join(saidBase, turn.shown)
+  saidByVoice.value = spoken || kind === 'voice'
   problem.value = ''
   clearAudio()
   busy.value = true
@@ -232,6 +237,7 @@ async function submit(kind, prepare, context, saidBase, turn = {}, spoken = fals
     if (controller.signal.aborted) return
     if (spoken) conversation?.done()
     said.value = saidBefore
+    saidByVoice.value = byVoiceBefore
     if (kind === 'voice' && error.status === 503) {
       showProblem('voiceUnavailable')
     } else {
@@ -315,6 +321,8 @@ async function demoLoop() {
     await wait(2600)
     if (result.value?.status === 'clarify') {
       await ask('3-093')
+      // Phòng khám → kiosk hỏi đã đặt lịch chưa.
+      if (result.value?.context?.pending === 'appointment') await ask('Đã đặt lịch')
       await walked()
     }
     reset()
@@ -422,7 +430,7 @@ onBeforeUnmount(() => {
         </template>
 
         <template v-else-if="mode === 'busy'">
-          <p v-if="said" class="bubble"><b>{{ labels.youAsked }}</b>“{{ said }}”</p>
+          <p v-if="said" class="bubble"><b>{{ saidByVoice ? labels.weHeard : labels.youAsked }}</b>“{{ said }}”</p>
           <div class="listen inline" role="status">
             <span class="spinner"></span>
             <h2>{{ labels.thinking }}</h2>
@@ -431,8 +439,9 @@ onBeforeUnmount(() => {
         </template>
 
         <RoutePanel v-else :labels="labels" :kiosk-floor="kioskFloor" :result="result" :said="said"
+          :said-by-voice="saidByVoice"
           :audio-url="audioUrl" :input-locked="inputLocked" :active-step="activeStep"
-          @select="(code, name) => submitText(code, false, name)" @reset="reset"
+          @select="(code, name) => submitText(code, false, name)" @reply="(text) => submitText(text)" @reset="reset"
           @replay="diagram?.replay()" @desk="submitText(DESK_CODE, true, labels.toDesk)">
           <template #reply>
             <div class="ask-row">

@@ -17,6 +17,55 @@ VIETNAMESE_HINTS = {
 }
 
 
+YES = {"co", "dung", "vang", "da", "u", "phai", "roi", "ok", "oke", "okay", "yes", "yeah", "yep", "sure", "correct", "right"}
+NO = {"khong", "chua", "sai", "no", "nope", "not", "wrong"}
+
+
+def yes_no(text: str) -> bool | None:
+    """Khách đồng ý (True), từ chối (False) hay nói điều khác (None). Có chữ phủ định thì coi là từ chối."""
+    words = set(normalize(text).split())
+    if words & NO:
+        return False
+    return True if words & YES else None
+
+
+# Khách tự nói về lịch hẹn ngay trong câu hỏi. Xét phủ định trước vì "chưa có lịch" chứa "có lịch".
+NO_APPOINTMENT = (
+    "chua dat lich", "chua co lich", "chua co hen", "khong co lich", "khong co hen", "chua hen",
+    "no appointment", "not booked", "haven t booked", "don t have an appointment",
+    "do not have an appointment", "without an appointment",
+)
+HAS_APPOINTMENT = (
+    "da dat lich", "dat lich roi", "co lich", "co hen", "da hen", "bac si hen",
+    "have an appointment", "got an appointment", "my appointment", "already booked", "i booked", "i have booked",
+)
+
+
+def has_phrase(text: str, phrases) -> bool:
+    padded = f" {normalize(text)} "
+    return any(f" {phrase} " in padded for phrase in phrases)
+
+
+def stated_appointment(text: str) -> bool | None:
+    """Câu có nói rõ đã/chưa có lịch hẹn không ("tôi có hẹn khám ở khoa tim")."""
+    if has_phrase(text, NO_APPOINTMENT):
+        return False
+    return True if has_phrase(text, HAS_APPOINTMENT) else None
+
+
+def appointment_answer(text: str) -> bool | None:
+    """Câu đáp cho "Anh chị đã đặt lịch chưa?": "rồi" / "chưa" / "có" / "không"…"""
+    stated = stated_appointment(text)
+    if stated is not None:
+        return stated
+    # "chưa" chắc chắn là chưa; "rồi" thắng "không" ("không, tôi đặt rồi"); còn lại như có/không thường.
+    if has_phrase(text, ("chua", "not yet", "haven t", "have not", "don t", "do not", "didn t", "did not")):
+        return False
+    if has_phrase(text, ("roi", "da dat", "i have", "i do", "i did", "already")):
+        return True
+    return yes_no(text)
+
+
 def normalize(text: str) -> str:
     folded = unicodedata.normalize("NFD", text.casefold().replace("đ", "d"))
     without_marks = "".join(c for c in folded if not unicodedata.combining(c))

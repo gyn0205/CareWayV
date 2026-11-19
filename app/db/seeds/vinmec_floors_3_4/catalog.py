@@ -4,6 +4,13 @@ from dataclasses import dataclass
 
 SITE_CODE = "VINMEC-DEMO-F34"
 
+# Lễ tân hỏi "đã đặt lịch chưa" trước khi chỉ đến khoa/phòng khám; chưa có lịch thì mời đến quầy này.
+BOOKING_DESK = "Tư vấn dịch vụ và đặt lịch"
+# Không hỏi lịch hẹn: quầy dịch vụ (nhà thuốc, thanh toán, lễ tân – tư vấn) và nơi nộp mẫu.
+# shortcut: danh sách cố định cho cơ sở mô phỏng, chuyển thành cột trong bảng khoa/phòng khi có dữ liệu bệnh viện thật.
+WALK_IN_ZONES = frozenset({"3-04", "3-10", "4-01", "4-14"})
+WALK_IN_ROOMS = frozenset({"Tiếp nhận mẫu nước tiểu", "Tiếp nhận mẫu gửi", "Tiếp nhận mẫu lưu trữ"})
+
 
 @dataclass(frozen=True)
 class Zone:

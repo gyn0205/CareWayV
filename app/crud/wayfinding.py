@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import (
-    Building, Department, Floor, HospitalSite, Kiosk, NavigationEdge, NavigationNode, Room,
+    Building, Department, Doctor, Floor, HospitalSite, Kiosk, NavigationEdge, NavigationNode, Room,
     Service, ServiceAlias, ServiceLocation,
 )
 
@@ -68,6 +68,24 @@ def active_service_rooms(db: Session, site_id: int):
         .where(
             services.c.site_id == site_id, services.c.deleted_at.is_(None),
             locations.c.deleted_at.is_(None), locations.c.is_active,
+            rooms.c.deleted_at.is_(None), rooms.c.is_active,
+        )
+    )
+
+
+def active_doctors(db: Session, site_id: int):
+    # Bác sĩ đang khám kèm mã phòng; lọc xoá mềm ở cả hai bảng như truy vấn dịch vụ.
+    doctors, rooms = Doctor.__table__, Room.__table__
+    return db.execute(
+        select(
+            doctors.c.code, doctors.c.title, doctors.c.name, doctors.c.normalized_name,
+            rooms.c.code.label("room_code"),
+        )
+        .select_from(doctors.join(
+            rooms, (rooms.c.site_id == doctors.c.site_id) & (rooms.c.id == doctors.c.room_id),
+        ))
+        .where(
+            doctors.c.site_id == site_id, doctors.c.deleted_at.is_(None), doctors.c.is_active,
             rooms.c.deleted_at.is_(None), rooms.c.is_active,
         )
     )

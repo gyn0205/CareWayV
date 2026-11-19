@@ -8,12 +8,13 @@ const props = defineProps({
   kioskFloor: { type: Number, required: true },
   result: { type: Object, required: true },
   said: String,
+  saidByVoice: Boolean,
   audioUrl: String,
   inputLocked: Boolean,
   // Bước đang đi trong mô phỏng trên bản đồ (-1 = chưa phát).
   activeStep: { type: Number, default: -1 },
 })
-defineEmits(['select', 'reset', 'replay', 'desk'])
+defineEmits(['select', 'reply', 'reset', 'replay', 'desk'])
 
 const route = computed(() => props.result.route)
 const english = computed(() => props.result.language === 'en')
@@ -72,7 +73,7 @@ onBeforeUnmount(() => {
   <div class="res-top">
     <button type="button" class="ghost" @click="$emit('reset')"><ArrowLeft :size="18" /> {{ labels.newSearch }}</button>
   </div>
-  <p v-if="said" class="bubble"><b>{{ labels.youAsked }}</b>“{{ said }}”</p>
+  <p v-if="said" class="bubble"><b>{{ saidByVoice ? labels.weHeard : labels.youAsked }}</b>“{{ said }}”</p>
 
   <template v-if="route">
     <div class="dest">
@@ -80,6 +81,7 @@ onBeforeUnmount(() => {
       <h2>{{ destinationName(route.destination) }}</h2>
       <span v-if="altName" class="en">{{ altName }}</span>
       <div v-if="route.destination.department" class="room">{{ route.destination.department }}</div>
+      <div v-if="route.destination.doctor" class="room">{{ route.destination.doctor }}</div>
       <div class="meta">
         <span><ArrowDownUp :size="15" /> {{ floorLabel }}</span>
         <span><Clock3 :size="15" /> {{ labels.minutes(Math.floor(route.seconds / 60), route.seconds % 60) }}</span>
@@ -115,19 +117,26 @@ onBeforeUnmount(() => {
 
   <template v-else-if="result.status === 'clarify'">
     <div>
-      <h1 class="state-title">{{ labels.pick }}</h1>
+      <h1 class="state-title">{{ result.replies?.length ? labels.confirm : labels.pick }}</h1>
       <p class="sub">{{ result.message }}</p>
     </div>
+    <!-- Câu trả lời nhanh (vd. "Đúng rồi" / "Không phải") gửi như khách tự nói. -->
+    <div v-if="result.replies?.length" class="replies">
+      <button v-for="reply in result.replies" :key="reply" type="button" class="primary"
+        :disabled="inputLocked" @click="$emit('reply', reply)">{{ reply }}</button>
+    </div>
     <slot name="reply" />
-    <div v-if="result.candidates.length" class="cands">
+    <!-- Câu hỏi lịch hẹn: điểm đến chỉ để tô trên bản đồ, không thành thẻ bấm (bấm không trả lời câu hỏi). -->
+    <div v-if="result.candidates.length && result.context?.pending !== 'appointment'" class="cands">
       <button v-for="candidate in result.candidates" :key="candidate.code" class="cand-btn" type="button"
         :disabled="inputLocked" @click="$emit('select', candidate.code, destinationName(candidate))">
         <span class="fl" :class="{ 'here-fl': candidate.floor === kioskFloor }">
           {{ labels.floorShort }}<br>{{ candidate.floor }}
         </span>
         <span>
-          <b>{{ destinationName(candidate) }}</b>
-          <small>{{ [candidate.department, candidate.code].filter(Boolean).join(' · ') }}</small>
+          <!-- Hỏi theo bác sĩ: tên bác sĩ là dòng chính để phân biệt người trùng tên. -->
+          <b>{{ candidate.doctor || destinationName(candidate) }}</b>
+          <small>{{ [candidate.doctor && destinationName(candidate), candidate.department, candidate.code].filter(Boolean).join(' · ') }}</small>
         </span>
       </button>
     </div>

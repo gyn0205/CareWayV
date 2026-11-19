@@ -88,21 +88,206 @@ class BilingualWayfindingTest(unittest.TestCase):
             self.assertEqual([vertical["start"]["floor"], vertical["end"]["floor"]], [3, 4])
             self.assertIn("elevator" if language == "en" else "Thang máy", vertical["instruction"])
 
+    def with_appointment(self, result, answer=None):
+        """Kiosk hỏi "đã đặt lịch chưa" → trả lời là đã có lịch, trả về lượt kế tiếp."""
+        self.assertEqual(result["status"], "clarify")
+        self.assertEqual(result["context"]["pending"], "appointment")
+        answer = answer or ("Yes, I have one" if result["language"] == "en" else "Đã đặt lịch")
+        status, turn = self.submit("text", text=answer, context=result["context"])
+        self.assertEqual(status, 200)
+        return turn
+
     def test_text_departments_and_service_aliases(self):
-        for utterance, code, language in (
-            ("Where is the Cardiovascular Center?", "3-01", "en"),
-            ("Chỉ đường đến Trung tâm Tim mạch", "3-01", "vi"),
-            ("Where can I get an electrocardiogram?", "3-009", "en"),
-            ("Tôi muốn đo điện tim", "3-009", "vi"),
-            # STT realtime viết liền mã phòng.
-            ("Phòng 4053 ở đâu vậy?", "4-053", "vi"),
-            ("Cho tôi đến nhà thuốc. À không, phòng 4053.", "4-053", "vi"),
+        for utterance, code, language, asks in (
+            ("Where is the Cardiovascular Center?", "3-01", "en", True),
+            ("Chỉ đường đến Trung tâm Tim mạch", "3-01", "vi", True),
+            ("Where can I get an electrocardiogram?", "3-009", "en", True),
+            ("Tôi muốn đo điện tim", "3-009", "vi", True),
+            # STT realtime viết liền mã phòng; đọc mã phòng = đã có phiếu → không hỏi lịch hẹn.
+            ("Phòng 4053 ở đâu vậy?", "4-053", "vi", False),
+            ("Cho tôi đến nhà thuốc. À không, phòng 4053.", "4-053", "vi", False),
         ):
             with self.subTest(utterance=utterance):
                 status, result = self.submit("text", text=utterance)
                 self.assertEqual(status, 200)
-                self.assert_route(result, code, language)
+                self.assert_route(self.with_appointment(result) if asks else result, code, language)
         self.openrouter.assert_not_called()
+
+    def test_appointment_is_asked_before_clinics(self):
+        status, first = self.submit("text", text="Khoa tim mạch ở đâu?")
+        self.assertEqual(first["message"], "Anh chị đã đặt lịch hẹn ở Trung tâm Tim mạch chưa ạ?")
+        self.assertEqual(first["replies"], ["Đã đặt lịch", "Chưa đặt lịch"])
+        for answer in ("Đã đặt lịch", "rồi", "có", "Dạ có rồi", "không, tôi đặt rồi"):
+            with self.subTest(answer=answer):
+                self.assert_route(self.with_appointment(first, answer), "3-01", "vi")
+
+        # Chưa có lịch → mời đến quầy tư vấn tầng 4, kèm hai lựa chọn.
+        for answer in ("Chưa đặt lịch", "chưa", "Dạ không", "không có"):
+            with self.subTest(answer=answer):
+                status, offer = self.submit("text", text=answer, context=first["context"])
+                self.assertEqual(offer["status"], "clarify")
+                self.assertIn("tầng 4", offer["message"])
+                self.assertIn("vẫn muốn đến Trung tâm Tim mạch", offer["message"])
+                desk, wanted = [candidate["code"] for candidate in offer["candidates"]]
+                self.assertEqual(wanted, "3-01")
+                self.assertEqual(offer["context"]["pending"], "booking")
+        for answer, code in (
+            ("Đến quầy tư vấn", desk), ("ok tôi ra quầy", desk), (desk, desk),
+            ("Tôi vẫn muốn đến khoa", "3-01"), ("cứ chỉ đường cho tôi", "3-01"), ("3-01", "3-01"),
+        ):
+            with self.subTest(answer=answer):
+                status, turn = self.submit("text", text=answer, context=offer["context"])
+                self.assert_route(turn, code, "vi")
+        # Câu đáp không hiểu → hỏi lại đúng câu đang chờ.
+        status, again = self.submit("text", text="ờ", context=offer["context"])
+        self.assertEqual(again["context"]["pending"], "booking")
+        status, again = self.submit("text", text="ờ", context=first["context"])
+        self.assertEqual(again["message"], first["message"])
+
+    def test_appointment_not_asked_for_walk_in_or_stated(self):
+        for utterance, code in (
+            ("Nhà thuốc ở đâu", "3-04"), ("quầy lễ tân", "4-243"), ("nộp mẫu nước tiểu tầng 4", None),
+            ("Tôi có hẹn khám ở trung tâm tim mạch", "3-01"), ("bác sĩ hẹn tôi đo điện tim", "3-009"),
+        ):
+            with self.subTest(utterance=utterance):
+                status, result = self.submit("text", text=utterance)
+                if code is None:
+                    # Nhiều phòng nộp mẫu trên tầng 4 → chọn phòng, rồi đi luôn không hỏi lịch hẹn.
+                    self.assertEqual(result["status"], "clarify")
+                    code = result["candidates"][0]["code"]
+                    status, result = self.submit("text", text=code, context=result["context"])
+                self.assert_route(result, code, "vi")
+        # Tự nói chưa có lịch → mời ngay đến quầy tư vấn, không hỏi lại.
+        status, offer = self.submit("text", text="Tôi chưa đặt lịch, khoa nội tiết ở đâu")
+        self.assertEqual(offer["context"]["pending"], "booking")
+        # English: chưa có lịch → quầy tư vấn hoặc vẫn đến khoa.
+        status, first = self.submit("text", text="Where is the Cardiovascular Center?")
+        self.assertEqual(first["replies"], ["Yes, I have one", "Not yet"])
+        status, offer = self.submit("text", text="Not yet", context=first["context"])
+        self.assertIn("still go to Cardiovascular Center", offer["message"])
+        desk = offer["candidates"][0]["code"]
+        for answer, code in (("I still want to go there", "3-01"), ("OK, the advice desk", desk)):
+            with self.subTest(answer=answer):
+                status, turn = self.submit("text", text=answer, context=offer["context"])
+                self.assert_route(turn, code, "en")
+
+    def test_appointment_asked_after_choosing_among_candidates(self):
+        # "siêu âm vú" có 2 phòng → bấm chọn một phòng → vẫn phải hỏi lịch hẹn (không phải khách đọc mã).
+        status, first = self.submit("text", text="siêu âm vú")
+        self.assertEqual(first["status"], "clarify")
+        code = first["candidates"][0]["code"]
+        status, turn = self.submit("text", text=code, context=first["context"])
+        self.assert_route(self.with_appointment(turn), code, "vi")
+        # Đã nói có lịch từ đầu thì sau khi chọn phòng không hỏi lại.
+        status, first = self.submit("text", text="tôi có lịch siêu âm vú")
+        self.assertIs(first["context"]["appointment"], True)
+        status, turn = self.submit("text", text=code, context=first["context"])
+        self.assert_route(turn, code, "vi")
+
+    def test_misheard_name_is_confirmed_before_routing(self):
+        # STT nghe "điện tâm đồ" thành "điện tim đồ" → hỏi lại, đồng ý (nói hoặc bấm thẻ) mới chỉ đường.
+        status, first = self.submit("text", text="Tôi muốn làm điện tim đồ")
+        self.assertEqual(status, 200)
+        self.assertEqual((first["status"], first["language"]), ("clarify", "vi"))
+        self.assertEqual(first["message"], "Có phải anh chị muốn đến Điện tâm đồ không?")
+        self.assertEqual(first["replies"], ["Đúng rồi", "Không phải"])
+        self.assertEqual([c["code"] for c in first["candidates"]], ["3-009"])
+        self.assertEqual(first["context"]["pending"], "confirm")
+        for answer in ("Đúng rồi", "vâng", "3-009"):
+            with self.subTest(answer=answer):
+                status, turn = self.submit("text", text=answer, context=first["context"])
+                self.assertEqual(status, 200)
+                self.assert_route(self.with_appointment(turn), "3-009", "vi")
+
+        # Từ chối → mời nói lại, không giữ câu xác nhận cũ.
+        status, turn = self.submit("text", text="Không phải", context=first["context"])
+        self.assertEqual((turn["status"], turn["context"]), ("not_found", None))
+        self.assertIn("nói lại", turn["message"])
+        # Đổi ý giữa chừng → tìm điểm đến mới.
+        status, turn = self.submit("text", text="Không, tôi cần đến nhà thuốc", context=first["context"])
+        self.assert_route(turn, "3-04", "vi")
+
+    def test_misheard_name_in_english_and_chatter(self):
+        status, first = self.submit("text", text="Where is the cardiovasculer center?")
+        self.assertEqual((first["status"], first["language"]), ("clarify", "en"))
+        self.assertEqual(first["message"], "Did you mean Cardiovascular Center?")
+        self.assertEqual(first["replies"], ["Yes", "No"])
+        status, turn = self.submit("text", text="Yes", context=first["context"])
+        self.assert_route(self.with_appointment(turn), "3-01", "en")
+        # Câu nói chuyện thường không bị đoán thành một phòng.
+        for chatter in ("Trời hôm nay nóng quá", "Tôi đã đặt lịch rồi", "Tìm đâu rồi"):
+            with self.subTest(chatter=chatter):
+                status, turn = self.submit("text", text=chatter)
+                self.assertEqual(turn["status"], "not_found")
+
+    def test_short_department_names(self):
+        # Khách gọi tắt tên khoa nhiều vế.
+        for utterance, code in (
+            ("Khoa nội tiết ở đâu", "4-07"), ("Trung tâm ung bướu", "3-03"),
+            ("khoa thần kinh", "4-10"), ("tai mũi họng", "4-13"),
+        ):
+            with self.subTest(utterance=utterance):
+                status, result = self.submit("text", text=utterance)
+                self.assert_route(self.with_appointment(result), code, "vi")
+
+    def test_doctor_with_duplicate_names_in_different_departments(self):
+        # 3 bác sĩ "Nguyễn Văn Hùng" ở 3 khoa → hỏi khoa → chỉ đường, câu chỉ đường nêu đúng bác sĩ.
+        status, first = self.submit("text", text="Tôi có lịch hẹn với bác sĩ Nguyễn Văn Hùng")
+        self.assertEqual(first["status"], "clarify")
+        self.assertEqual(len(first["candidates"]), 3)
+        self.assertTrue(all(c["doctor"].endswith("Nguyễn Văn Hùng") for c in first["candidates"]))
+        self.assertIn("ở khoa nào", first["message"])
+        self.assertIs(first["context"]["appointment"], True)
+        cardio = next(c for c in first["candidates"] if c["department"] == "Trung tâm Tim mạch")
+        for answer in ("khoa tim mạch", "Trung tâm Tim mạch", cardio["code"]):
+            with self.subTest(answer=answer):
+                status, turn = self.submit("text", text=answer, context=first["context"])
+                # Đã nói có lịch hẹn → không hỏi lại.
+                self.assert_route(turn, cardio["code"], "vi")
+                self.assertTrue(turn["message"].startswith(f"Để gặp {cardio['doctor']} tại"))
+                self.assertEqual(turn["route"]["destination"]["doctor"], cardio["doctor"])
+        # Trả lời bằng tầng: tầng 4 chỉ có một người.
+        status, turn = self.submit("text", text="tầng 4", context=first["context"])
+        self.assertEqual(turn["route"]["destination"]["floor"], 4)
+
+    def test_doctor_twins_in_one_department_and_given_name_only(self):
+        # Hai "Lê Minh Tuấn" cùng khoa → phân biệt bằng học hàm và phòng.
+        status, first = self.submit("text", text="Tôi có hẹn với bác sĩ Lê Minh Tuấn")
+        self.assertIn("đọc mã phòng", first["message"])
+        doctors = {c["doctor"] for c in first["candidates"]}
+        self.assertEqual(len(doctors), 2)
+        chosen = first["candidates"][1]
+        status, turn = self.submit("text", text=chosen["code"], context=first["context"])
+        self.assert_route(turn, chosen["code"], "vi")
+        self.assertIn(chosen["doctor"], turn["message"])
+        # Chỉ nói tên gọi → nhiều người → xin họ tên đầy đủ, kèm thẻ chọn.
+        status, first = self.submit("text", text="Tôi có hẹn với bác sĩ Hùng")
+        self.assertIn("họ tên đầy đủ", first["message"])
+        self.assertGreater(len(first["candidates"]), 4)
+        status, turn = self.submit("text", text="bác sĩ Hoàng Quốc Việt tầng 3", context=first["context"])
+        self.assertEqual(turn["route"]["destination"]["floor"], 3)
+
+    def test_doctor_without_appointment_and_in_english(self):
+        # Hỏi bác sĩ mà chưa nói lịch hẹn → vẫn hỏi lịch hẹn, nêu tên bác sĩ; câu chỉ đường cuối vẫn nhớ bác sĩ.
+        status, first = self.submit("text", text="bác sĩ Đỗ Thị Hương tầng 4 ở đâu")
+        self.assertEqual(first["message"], f"Anh chị đã đặt lịch hẹn với {first['candidates'][0]['doctor']} chưa ạ?")
+        status, turn = self.submit("text", text="rồi", context=first["context"])
+        self.assertIn("Đỗ Thị Hương", turn["message"])
+        status, first = self.submit("text", text="I have an appointment with doctor Pham Thu Ha")
+        self.assertEqual((first["status"], first["language"]), ("clarify", "en"))
+        self.assertIn("Which one is yours?", first["message"])
+        code = first["candidates"][0]["code"]
+        status, turn = self.submit("text", text=code, context=first["context"])
+        self.assert_route(turn, code, "en")
+        self.assertTrue(turn["message"].startswith("To see "))
+
+    def test_appointment_question_keeps_destination_on_map(self):
+        # Bản đồ cần biết điểm đến để mở đúng tầng trong lúc hỏi lịch hẹn.
+        status, first = self.submit("text", text="khoa tim mạch")
+        self.assertEqual(first["context"]["pending"], "appointment")
+        self.assertEqual([c["code"] for c in first["candidates"]], ["3-01"])
+        # Mã khoa nội bộ không lộ ra API.
+        self.assertNotIn("department_code", first["candidates"][0])
 
     def test_kiosk_map_shows_every_floor_before_any_question(self):
         # Màn hình chờ: kiosk đứng đúng tầng và có mặt bằng cả hai tầng, tầng cao trước.
@@ -219,6 +404,20 @@ class BilingualWayfindingTest(unittest.TestCase):
                     self.assertEqual(transcription_request["language"], preference)
                 self.assertEqual(speech_request["provider"]["options"]["elevenlabs"]["language_code"], expected)
                 self.assertIn(spoken_code, speech_request["input"])
+
+    def test_voice_misheard_name_then_appointment(self):
+        # Giọng nói đi chung luồng: STT nghe sai → xác nhận → hỏi lịch hẹn → chỉ đường.
+        self.openrouter.side_effect = [
+            io.BytesIO(json.dumps({"text": text, "language": "vi"}).encode())
+            for text in ("Tôi muốn làm điện tim đồ", "Đúng rồi", "Dạ rồi")
+        ]
+        audio = wav_fixture()
+        status, turn = self.submit("voice", audio_base64=audio, speak=False)
+        self.assertEqual((turn["status"], turn["context"]["pending"]), ("clarify", "confirm"))
+        status, turn = self.submit("voice", audio_base64=audio, context=turn["context"], speak=False)
+        self.assertEqual(turn["context"]["pending"], "appointment")
+        status, turn = self.submit("voice", audio_base64=audio, context=turn["context"], speak=False)
+        self.assert_route(turn, "3-009", "vi")
 
     def test_voice_uses_elevenlabs_when_its_key_is_set(self):
         mock_audio = b"ID3-mocked-mp3"

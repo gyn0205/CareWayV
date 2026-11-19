@@ -7,14 +7,23 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import WayfindingError
 from app.crud import wayfinding as catalog
-from app.db.seeds.vinmec_floors_3_4.catalog import SITE_CODE
+from app.db.seeds.vinmec_floors_3_4.catalog import BOOKING_DESK, SITE_CODE, WALK_IN_ROOMS, WALK_IN_ZONES
 from app.db.seeds.vinmec_floors_3_4.floor_plan import demo_floor_plan
 from app.models import Kiosk
 from app.schema.wayfinding import (
     Clarification, DirectionResult, FloorPlan, KioskMap, Language, MapFloor, Point, Route, Step, TextTurn, Turn,
 )
-from app.services.wayfinding_language import normalize, select_language
-from app.services.wayfinding_lookup import MAX_CANDIDATES, load_destinations, resolve
+from app.services.wayfinding_language import (
+    appointment_answer, has_phrase, normalize, select_language, stated_appointment, yes_no,
+)
+from app.services.wayfinding_lookup import (
+    MAX_CANDIDATES, load_destinations, match_doctors, resolve, spoken_floor,
+)
+
+
+# Câu đáp khi được mời đến quầy tư vấn: "vẫn muốn đến" khoa, hay đi quầy. Xét "vẫn" trước vì "tư vấn" cũng có "van".
+INSIST = ("van muon", "van den", "van di", "van can", "van cu", "cu chi", "cu di", "still", "anyway")
+DESK_WORDS = ("tu van", "quay", "dat lich", "desk", "counter", "advice", "booking", "book")
 
 
 def kiosk_context(turn: Turn) -> Clarification | None:
@@ -135,8 +144,76 @@ def find_route(
         message = "The kiosk location is unavailable." if english else "Vị trí kiosk hiện không khả dụng."
         raise WayfindingError("kiosk_conflict", message)
     targets = load_destinations(db, site, nodes, floors)
-    prior = context.candidate_codes if context else []
-    codes = resolve(db, site, text, targets, prior)
+    pending = context.pending if context else None
+    prior = [code for code in context.candidate_codes if code in targets] if context else []
+    # Đang chờ khách đáp thì chưa đoán gần đúng: "đúng rồi" không được hiểu thành tên một phòng.
+    codes, how = resolve(db, site, text, targets, [] if pending else prior, fuzzy=not pending)
+    if prior and not pending and codes and not set(codes) & set(prior):
+        # Đáp câu "ở khoa nào?" bằng tên khoa → giữ các lựa chọn đang chờ thuộc khoa đó.
+        departments = {targets[code][0].department_code for code in codes if targets[code][0].kind == "department"}
+        narrowed = [code for code in prior if targets[code][0].department_code in departments]
+        if narrowed:
+            codes, how = narrowed, "prior"
+    if pending == "confirm" and prior and set(codes) <= set(prior):
+        # Khách đáp câu "Có phải anh chị muốn đến …?": đồng ý thì đi tiếp với điểm đến đã đoán.
+        answer = yes_no(text)
+        if answer:
+            codes, how = prior, "prior"
+        elif answer is False and not codes:
+            return DirectionResult(
+                status="not_found", language=language,
+                message=(
+                    "Sorry about that. Please tell me the department or the room code on your slip again."
+                    if english else
+                    "Xin lỗi anh chị. Anh chị vui lòng nói lại tên khoa hoặc mã phòng ghi trên phiếu."
+                ),
+            )
+    # Lịch hẹn: khách đã cho biết ở lượt trước, hoặc tự nói trong câu này ("tôi có hẹn khám…").
+    appointment = context.appointment if context else None
+    stated = stated_appointment(text)
+    if stated is not None:
+        appointment = stated
+    if pending == "appointment" and prior and set(codes) <= set(prior):
+        answer = appointment_answer(text)
+        if answer is not None:
+            appointment, codes, how = answer, prior, "prior"
+    if pending == "booking" and len(prior) == 2 and set(codes) <= set(prior):
+        # Chưa có lịch: khách chọn quầy tư vấn, hay "vẫn muốn đến" khoa (bấm thẻ cũng gửi mã vào đây).
+        desk_choice, wanted = prior
+        if codes == [wanted] or has_phrase(text, INSIST):
+            codes, how = [wanted], "insist"
+        elif codes == [desk_choice] or has_phrase(text, DESK_WORDS):
+            codes, how = [desk_choice], "prior"
+    if pending and not codes:
+        # Không phải câu trả lời → coi như khách hỏi điểm đến mới.
+        codes, how = resolve(db, site, text, targets, [])
+        if not codes and pending in ("appointment", "booking"):
+            # Chưa hiểu câu đáp → hỏi lại đúng câu đang chờ thay vì báo không tìm thấy.
+            codes, how = prior[-1:], "prior"
+
+    # Bác sĩ: "tôi có hẹn với bác sĩ Hùng" → phòng bác sĩ khám (mã phòng khách tự đọc vẫn được ưu tiên).
+    doctors = list(catalog.active_doctors(db, site))
+    found = [doctor for doctor in match_doctors(text, doctors) if doctor.room_code in targets] if how != "code" else []
+    if found:
+        # Khách nói kèm tầng / khoa thì lọc luôn những người trùng tên.
+        floor, _ = spoken_floor(normalize(text))
+        departments = {targets[code][0].department_code for code in codes if targets[code][0].kind == "department"}
+        found = [
+            doctor for doctor in found
+            if (floor is None or targets[doctor.room_code][0].floor == floor)
+            and (not departments or targets[doctor.room_code][0].department_code in departments)
+        ] or found
+        codes, how = sorted({doctor.room_code for doctor in found}), "doctor"
+    # Gắn tên bác sĩ vào phòng (lượt này, hoặc từ lượt hỏi lại trước) để thẻ và câu chỉ đường nêu đúng người.
+    by_code = {doctor.code: doctor for doctor in doctors}
+    named = found or [by_code[code] for code in (context.doctor_codes if context else []) if code in by_code]
+    for doctor in named:
+        if doctor.room_code in targets:
+            target, node_id = targets[doctor.room_code]
+            label = ", ".join(filter(None, (target.doctor, f"{doctor.title} {doctor.name}")))
+            targets[doctor.room_code] = (target.model_copy(update={"doctor": label}), node_id)
+    doctor_codes = [doctor.code for doctor in named if doctor.room_code in codes]
+
     if not codes:
         return DirectionResult(
             status="not_found", language=language,
@@ -145,7 +222,27 @@ def find_route(
                 if english else
                 "Tôi chưa tìm được điểm đến. Anh chị vui lòng nói mã phòng hoặc tên khoa ghi trên phiếu."
             ),
-            context=context.model_copy(update={"language": language}) if context else None,
+            # Giữ lựa chọn đang chờ để khách vẫn có thể chỉ nói tầng; câu xác nhận thì không giữ.
+            context=context.model_copy(update={"language": language}) if context and not pending else None,
+        )
+    if how == "fuzzy" and len(codes) <= MAX_CANDIDATES:
+        # Nghe gần đúng → hỏi lại trước khi chỉ đường, không tự quyết.
+        choices = [targets[code][0] for code in codes]
+        names = list(dict.fromkeys(
+            (choice.name_en or choice.name) if english else choice.name for choice in choices
+        ))[:3]
+        return DirectionResult(
+            status="clarify", language=language,
+            message=(
+                f"Did you mean {' or '.join(names)}?" if english
+                else f"Có phải anh chị muốn đến {' hoặc '.join(names)} không?"
+            ),
+            candidates=choices if len(choices) <= 4 else [],
+            replies=["Yes", "No"] if english else ["Đúng rồi", "Không phải"],
+            context=Clarification(
+                kiosk_code=kiosk.code, candidate_codes=codes, wheelchair=wheelchair,
+                language=language, pending="confirm", appointment=appointment,
+            ),
         )
     if len(codes) > 1:
         question = (
@@ -156,7 +253,29 @@ def find_route(
             return DirectionResult(status="clarify", language=language, message=question)
         choices = [targets[code][0] for code in codes]
         floors_mentioned = sorted({choice.floor for choice in choices})
-        if len(floors_mentioned) == len(choices) and len(choices) <= 4:
+        if all(choice.doctor for choice in choices):
+            # Trùng tên bác sĩ: nêu từng người kèm khoa/tầng (cùng khoa thì kèm phòng) để khách chọn.
+            same_department = len({choice.department_code for choice in choices}) == 1
+            if len(choices) > 4:
+                question = (
+                    f"There are {len(choices)} matching doctors. Please tell me the doctor's full name or department."
+                    if english else
+                    f"Có {len(choices)} bác sĩ phù hợp. Anh chị vui lòng nói họ tên đầy đủ hoặc khoa của bác sĩ."
+                )
+            elif english:
+                labels = "; ".join(f"{choice.doctor}, room {choice.code} on floor {choice.floor}" for choice in choices)
+                question = f"There are {len(choices)} matching doctors: {labels}. Which one is yours?"
+            else:
+                labels = "; ".join(
+                    f"{choice.doctor} ở phòng {choice.code}" if same_department
+                    else f"{choice.doctor} ở {choice.department}, tầng {choice.floor}"
+                    for choice in choices
+                )
+                question = f"Có {len(choices)} bác sĩ phù hợp: {labels}. " + (
+                    "Anh chị vui lòng chọn trên màn hình hoặc đọc mã phòng."
+                    if same_department else "Anh chị có lịch với bác sĩ ở khoa nào?"
+                )
+        elif len(floors_mentioned) == len(choices) and len(choices) <= 4:
             if english:
                 labels = " or ".join(f"floor {floor}" for floor in floors_mentioned)
                 question = f"Which floor do you need, {labels}?"
@@ -176,11 +295,61 @@ def find_route(
             candidates=choices,
             context=Clarification(
                 kiosk_code=kiosk.code, candidate_codes=codes, wheelchair=wheelchair, language=language,
+                appointment=appointment, doctor_codes=doctor_codes,
             ),
         )
 
     destination, target_id = targets[codes[0]]
     name_en = destination.name_en or f"{destination.kind} {destination.code}"
+    desk = next((
+        code for code, (target, _) in targets.items() if target.kind == "room" and target.name == BOOKING_DESK
+    ), None)
+    # Khách tự đọc mã phòng (thường in trên phiếu) = đã đăng ký; bấm chọn trong danh sách kiosk đưa ra thì không tính.
+    read_code = how == "code" and not set(codes) <= set(prior)
+    if (
+        desk and codes[0] != desk and how != "insist" and not read_code
+        and destination.department_code not in WALK_IN_ZONES and destination.name not in WALK_IN_ROOMS
+    ):
+        label = (
+            f"phòng của {destination.doctor}" if destination.doctor
+            else f"{destination.name}, {destination.department}"
+            if destination.kind == "room" and destination.department else destination.name
+        )
+        if appointment is None:
+            return DirectionResult(
+                status="clarify", language=language,
+                message=(
+                    f"Do you already have an appointment with {destination.doctor}?"
+                    if english and destination.doctor else
+                    f"Do you already have an appointment at {name_en}?" if english else
+                    f"Anh chị đã đặt lịch hẹn với {destination.doctor} chưa ạ?" if destination.doctor else
+                    f"Anh chị đã đặt lịch hẹn ở {label} chưa ạ?"
+                ),
+                replies=["Yes, I have one", "Not yet"] if english else ["Đã đặt lịch", "Chưa đặt lịch"],
+                # Để bản đồ vẫn mở đúng tầng và tô điểm đến trong lúc hỏi.
+                candidates=[destination],
+                context=Clarification(
+                    kiosk_code=kiosk.code, candidate_codes=[destination.code], wheelchair=wheelchair,
+                    language=language, pending="appointment", doctor_codes=doctor_codes,
+                ),
+            )
+        if appointment is False:
+            booking = targets[desk][0]
+            return DirectionResult(
+                status="clarify", language=language,
+                message=(
+                    f"Without an appointment, please visit the service advice and booking desk on floor "
+                    f"{booking.floor} first. Would you like to go to the advice desk, or still go to {name_en}?"
+                    if english else
+                    f"Anh chị chưa có lịch hẹn thì nên đến quầy {booking.name} ở tầng {booking.floor} trước. "
+                    f"Anh chị muốn đến quầy tư vấn, hay vẫn muốn đến {label}?"
+                ),
+                candidates=[booking, destination],
+                context=Clarification(
+                    kiosk_code=kiosk.code, candidate_codes=[desk, destination.code], wheelchair=wheelchair,
+                    language=language, pending="booking", appointment=False, doctor_codes=doctor_codes,
+                ),
+            )
     edges = (
         edge for edge in catalog.active_edges(db, site, wheelchair)
         if edge.from_node_id in nodes and edge.to_node_id in nodes
@@ -242,12 +411,16 @@ def find_route(
     if english:
         label = f"{name_en} on floor {destination.floor}"
         message = f"To reach {label}, follow these directions." if steps else f"You are already at {label}."
+        if steps and destination.doctor:
+            message = f"To see {destination.doctor} in {label}, follow these directions."
     else:
         label = f"{destination.name}, mã {destination.code}, tầng {destination.floor}"
         message = (
             f"Để đến {label}, anh chị đi theo hướng dẫn sau."
             if steps else f"Anh chị đang ở điểm đến {label}."
         )
+        if steps and destination.doctor:
+            message = f"Để gặp {destination.doctor} tại {label}, anh chị đi theo hướng dẫn sau."
     if steps:
         message += " " + " ".join(step.instruction for step in steps)
     origin, arrival = point(kiosk.origin_node_id), point(target_id)
