@@ -42,6 +42,8 @@ const isTransfer = (step) => step.start.floor_id !== step.end.floor_id
 
 // Giữ bước đang đi luôn trong tầm nhìn.
 watch(() => props.activeStep, async (index) => {
+  // Khi nhúng trong iframe (demo trang giới thiệu), scrollIntoView kéo cả trang cha về đầu → bỏ qua.
+  if (window.self !== window.top) return
   await nextTick()
   steps.value?.children[index]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
 })
